@@ -44,9 +44,16 @@ class ComplianceEngine {
   /// evaluated — food-specific checks are NOT applied to non-food categories
   /// (garments, electronics, cosmetics, etc.). This keeps the engine as a
   /// multi-category packaged-product compliance scanner.
+  ///
+  /// [ocrReliable] indicates whether the OCR/image evidence was good enough to
+  /// be confident about the absence of a declaration. When false (or when the
+  /// OCR text is trivially sparse), undetected mandatory declarations are
+  /// reported as *needs verification* rather than confirmed violations. This
+  /// prevents a low-quality capture from being automatically flagged.
   static ComplianceAnalysis analyzeFull(
     String text, {
     ProductCategoryInfo? category,
+    bool ocrReliable = true,
   }) {
     final normalized = text
         .replaceAll('\r', '\n')
@@ -79,14 +86,51 @@ class ComplianceEngine {
 
     final rules = ComplianceRules.rulesForCategory(category);
 
+    // If the OCR produced almost nothing meaningful, we cannot trust the
+    // absence of a declaration. This is a safe, non-fabricating fallback.
+    final confidence = ocrReliable && !_isTooSparse(lower);
+
     return ComplianceAnalysis(
       product: product,
-      results: _validate(lower, product, rules),
+      results: _validate(lower, product, rules, ocrReliable: confidence),
     );
+  }
+
+  /// Heuristic: fewer than a handful of meaningful tokens means the OCR text is
+  /// too sparse to reliably conclude a declaration is missing.
+  static bool _isTooSparse(String lowerText) {
+    final meaningful = lowerText
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length > 1)
+        .length;
+
+    return meaningful < 4;
   }
 
   static List<ComplianceResult> analyze(String text) {
     return analyzeFull(text).results;
+  }
+
+  /// Number of checks that were positively detected (passed).
+  static int passedCount(List<ComplianceResult> results) =>
+      results.where((r) => r.isDetected).length;
+
+  /// Number of non-detected checks (violations + needs-verification).
+  static int issueCount(List<ComplianceResult> results) =>
+      results.where((r) => !r.isDetected).length;
+
+  /// Score out of 100 = detected / total * 100. Returns 0 for an empty list.
+  static int score(List<ComplianceResult> results) {
+    if (results.isEmpty) return 0;
+    return ((passedCount(results) / results.length) * 100).round();
+  }
+
+  /// Maps 0..100 score to the green / amber / red verdict band.
+  static ComplianceVerdict verdict(int score) {
+    if (score >= 80) return ComplianceVerdict.compliant;
+    if (score >= 50) return ComplianceVerdict.needsReview;
+    return ComplianceVerdict.actionRequired;
   }
 
   static String _extractProductName(String text) {
@@ -492,8 +536,9 @@ class ComplianceEngine {
   static List<ComplianceResult> _validate(
     String text,
     ExtractedProductData product,
-    List<ComplianceRule> rules,
-  ) {
+    List<ComplianceRule> rules, {
+    bool ocrReliable = true,
+  }) {
     final results = <ComplianceResult>[];
 
     final importedContext = RegExp(
@@ -756,9 +801,13 @@ class ComplianceEngine {
           evidence = 'Rule requires officer verification.';
       }
 
+      // When the OCR evidence is unreliable, a non-detected declaration is NOT
+      // a confirmed violation — it needs officer verification instead.
+      final uncertain = !detected && !ocrReliable;
+
       final status = detected
           ? 'DETECTED'
-          : rule.conditional
+          : (rule.conditional || uncertain)
               ? 'VERIFY'
               : 'POTENTIAL VIOLATION';
 
@@ -766,8 +815,17 @@ class ComplianceEngine {
         ComplianceResult(
           rule: rule,
           detected: detected,
-          evidence: evidence,
+          // When the check could not be reliably resolved, surface a clear
+          // reason instead of a generic "not detected" claim. This explains the
+          // uncertainty without inventing any field value — it only points at
+          // the insufficient image/OCR evidence.
+          evidence: uncertain
+              ? 'Could not reliably verify — the image/OCR result was '
+                  'insufficient to confidently identify the '
+                  '${rule.declaration.toLowerCase()}. ($evidence)'
+              : evidence,
           status: status,
+          uncertain: uncertain,
         ),
       );
     }

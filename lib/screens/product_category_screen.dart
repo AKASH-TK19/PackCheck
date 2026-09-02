@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/product_category.dart';
+import '../theme/app_theme.dart';
 
-/// Mandatory "Select Product Category" gate shown before the image
-/// capture / upload / inspection flow.
+/// Mandatory "What are you checking?" product-category gate shown before any
+/// image capture / upload.
 ///
 /// The Continue button stays disabled until exactly one category is selected.
 /// On selection the chosen [ProductCategoryInfo] is returned via
@@ -36,12 +37,13 @@ class _ProductCategoryScreenState extends State<ProductCategoryScreen> {
     final selected = _selected;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FB),
+      backgroundColor: PackCheckColors.background,
       appBar: AppBar(
-        title: const Text('Select Product Category'),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF1A2B4C),
-        foregroundColor: Colors.white,
+        title: const Text('Product Category'),
+        leading: IconButton(
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back),
+        ),
       ),
       body: SafeArea(
         child: Column(
@@ -53,36 +55,39 @@ class _ProductCategoryScreenState extends State<ProductCategoryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Select Product Category',
+                      'What are you checking?',
                       style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1A2B4C),
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: PackCheckColors.dark,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Choose the type of packaged product you are inspecting.',
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose a product type and PackCheck will run the '
+                      'compliance checks that apply to it.',
                       style: TextStyle(
                         fontSize: 15,
-                        color: Colors.black54,
+                        color: Colors.grey.shade600,
+                        height: 1.4,
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 22),
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 1.15,
+                        mainAxisSpacing: 14,
+                        crossAxisSpacing: 14,
+                        childAspectRatio: 0.98,
                       ),
                       itemCount: ProductCategory.all.length,
                       itemBuilder: (context, index) {
                         final category = ProductCategory.all[index];
-                        final isSelected = selected?.label == category.label;
+                        final isSelected =
+                            selected?.label == category.label;
 
                         return _CategoryTile(
                           category: category,
@@ -116,59 +121,112 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        selected ? category.color : Colors.black.withAlpha(20);
+    final baseColor = category.color;
 
-    return Material(
-      color: selected
-          ? category.color.withAlpha(30)
-          : Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: borderColor,
-              width: selected ? 2.5 : 1,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: selected ? baseColor.withValues(alpha: .08) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: selected ? baseColor : Colors.grey.shade200,
+          width: selected ? 2.2 : 1,
+        ),
+        boxShadow: [
+          if (selected)
+            BoxShadow(
+              color: baseColor.withValues(alpha: .25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            )
+          else
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                category.icon,
-                size: 34,
-                color: category.color,
-              ),
-              const SizedBox(height: 10),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            baseColor,
+                            baseColor.withValues(alpha: .75),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(
+                        category.icon,
+                        size: 26,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (selected)
+                      Positioned(
+                        right: -6,
+                        top: -6,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: baseColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 7),
+                Text(
                   category.label,
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight:
-                        selected ? FontWeight.bold : FontWeight.w500,
-                    color: const Color(0xFF1A2B4C),
+                    fontSize: 13.5,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: PackCheckColors.dark,
+                    height: 1.2,
                   ),
                 ),
-              ),
-              if (selected) ...[
-                const SizedBox(height: 6),
-                Icon(
-                  Icons.check_circle,
-                  size: 18,
-                  color: category.color,
+                const SizedBox(height: 3),
+                Text(
+                  category.description,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    height: 1.25,
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -194,8 +252,8 @@ class _ContinueBar extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, -2),
+            blurRadius: 12,
+            offset: Offset(0, -4),
           ),
         ],
       ),
@@ -207,33 +265,20 @@ class _ContinueBar extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: () => Navigator.maybePop(context),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: Color(0xFF1A2B4C)),
-                  foregroundColor: const Color(0xFF1A2B4C),
+                  padding: const EdgeInsets.symmetric(vertical: 15),
                 ),
-                child: const Text(
-                  'Back',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                child: const Text('Back'),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               flex: 2,
-              child: FilledButton(
-                onPressed: enabled ? onContinue : null,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  backgroundColor: const Color(0xFF1A2B4C),
-                  disabledBackgroundColor:
-                      const Color(0xFF1A2B4C).withAlpha(50),
-                ),
-                child: const Text(
-                  'CONTINUE',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+              child: SizedBox(
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed: enabled ? onContinue : null,
+                  icon: const Icon(Icons.arrow_forward),
+                  label: Text(enabled ? 'CONTINUE' : 'SELECT A CATEGORY'),
                 ),
               ),
             ),

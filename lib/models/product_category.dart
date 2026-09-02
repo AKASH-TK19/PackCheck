@@ -12,6 +12,10 @@ import 'package:flutter/material.dart';
 class ProductCategoryInfo {
   final String key;
   final String label;
+
+  /// Short, human-friendly subtitle that tells the user what kind of package
+  /// this category captures. Shown on the selection cards and result header.
+  final String description;
   final IconData icon;
   final Color color;
   final bool isFood;
@@ -20,6 +24,7 @@ class ProductCategoryInfo {
   const ProductCategoryInfo({
     required this.key,
     required this.label,
+    required this.description,
     required this.icon,
     required this.color,
     required this.isFood,
@@ -38,6 +43,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'food',
       label: 'Food Products',
+      description: 'Baked, canned, packaged & processed food items',
       icon: Icons.fastfood,
       color: Color(0xFFE64A19),
       isFood: true,
@@ -46,6 +52,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'beverages',
       label: 'Beverages',
+      description: 'Juices, soft drinks, water & packaged drinks',
       icon: Icons.local_drink,
       color: Color(0xFF29B6F6),
       isFood: true,
@@ -54,6 +61,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'garments',
       label: 'Readymade Garments / Hosiery',
+      description: 'Apparel, clothing & hosiery articles',
       icon: Icons.checkroom,
       color: Color(0xFF7E57C2),
       isFood: false,
@@ -62,6 +70,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'electronics',
       label: 'Electronics',
+      description: 'Appliances, gadgets & electronic goods',
       icon: Icons.devices_other,
       color: Color(0xFF26A69A),
       isFood: false,
@@ -70,6 +79,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'electrical',
       label: 'Electrical Products',
+      description: 'Wiring, devices & electrical appliances',
       icon: Icons.power,
       color: Color(0xFFFFA726),
       isFood: false,
@@ -78,6 +88,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'cosmetics',
       label: 'Cosmetics / Personal Care',
+      description: 'Skincare, haircare & personal care items',
       icon: Icons.face_retouching_natural,
       color: Color(0xFFEC407A),
       isFood: false,
@@ -86,6 +97,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'household',
       label: 'Household Products',
+      description: 'Cleaning & everyday household commodities',
       icon: Icons.cleaning_services,
       color: Color(0xFF66BB6A),
       isFood: false,
@@ -94,6 +106,7 @@ class ProductCategory {
     ProductCategoryInfo(
       key: 'other',
       label: 'Other Packaged Consumer Commodities',
+      description: 'Any other pre-packaged item',
       icon: Icons.category,
       color: Color(0xFF78909C),
       isFood: false,

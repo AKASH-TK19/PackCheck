@@ -1,0 +1,48 @@
+Resolving dependencies...
+Downloading packages...
+  archive 4.0.9 (4.2.0 available)
+  cli_util 0.4.2 (0.6.0 available)
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.2.1 (2.0.0 available)
+  hooks 2.0.2 (2.2.0 available)
+  image_picker_android 0.8.13+17 (0.8.13+21 available)
+  matcher 0.12.19 (0.12.20 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  meta 1.17.0 (1.19.0 available)
+  objective_c 9.5.0 (9.6.0 available)
+  pdf 3.12.0 (3.13.0 available)
+  printing 5.14.3 (5.15.0 available)
+  qr 3.0.2 (4.0.0 available)
+  record_use 0.6.0 (1.1.1 available)
+  share_plus 10.1.4 (13.3.0 available)
+  share_plus_platform_interface 5.0.2 (7.2.0 available)
+  sqflite 2.4.2+1 (2.4.3 available)
+  sqflite_android 2.4.2+3 (2.4.3 available)
+  sqflite_common 2.5.8 (2.5.11 available)
+  sqflite_darwin 2.4.2 (2.4.3+1 available)
+  sqflite_platform_interface 2.4.0 (2.4.1 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  synchronized 3.4.0+1 (3.4.1+2 available)
+  test_api 0.7.10 (0.7.13 available)
+  vector_math 2.2.0 (2.4.2 available)
+  win32 5.15.0 (6.4.0 available)
+  xml 6.6.1 (7.0.1 available)
+Got dependencies!
+27 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing packcheck...                                          
+
+warning - The value of the field '_running' isn't used - lib\screens\analysis_loading_screen.dart:65:8 - unused_field
+   info - The 'if' statement could be replaced by a null-aware assignment - lib\screens\analysis_loading_screen.dart:155:12 - prefer_conditional_assignment
+warning - Unused import: 'package:flutter/foundation.dart' - lib\screens\inspection_result_screen.dart:3:8 - unused_import
+  error - Target of URI doesn't exist: 'main.dart' - lib\screens\inspection_result_screen.dart:15:8 - uri_does_not_exist
+warning - The value of the local variable 'isVerify' isn't used - lib\screens\inspection_result_screen.dart:442:11 - unused_local_variable
+   info - Unnecessary use of string interpolation - lib\screens\inspection_result_screen.dart:527:27 - unnecessary_string_interpolations
+warning - The value of the local variable 'icon' isn't used - lib\screens\inspection_result_screen.dart:623:17 - unused_local_variable
+   info - Unnecessary use of string interpolation - lib\screens\inspection_result_screen.dart:656:25 - unnecessary_string_interpolations
+  error - The getter 'detail' isn't defined for the type 'ReadabilityFinding' - lib\screens\inspection_result_screen.dart:1052:21 - undefined_getter
+  error - The method 'OfficerVerificationScreen' isn't defined for the type '_InspectionResultScreenState' - lib\screens\inspection_result_screen.dart:1097:35 - undefined_method
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\inspection_result_screen.dart:1133:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\inspection_result_screen.dart:1161:44 - use_build_context_synchronously
+
+12 issues found. (ran in 10.8s)

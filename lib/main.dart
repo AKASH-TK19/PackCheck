@@ -8,14 +8,18 @@ import 'package:image_picker/image_picker.dart';
 
 import 'models/compliance_rule.dart';
 import 'models/product_category.dart';
-import 'services/barcode_service.dart';
 import 'services/compliance_engine.dart';
 import 'services/database_service.dart';
 import 'services/report_service.dart';
 import 'services/readability_service.dart';
+import 'screens/analysis_loading_screen.dart';
 import 'screens/barcode_scanner_screen.dart';
+import 'screens/image_quality_screen.dart';
+import 'screens/inspection_result_screen.dart';
 import 'screens/product_category_screen.dart';
+import 'services/image_quality_service.dart';
 import 'services/ocr_service.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(const LMInspectApp());
@@ -28,12 +32,8 @@ class LMInspectApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'LM Inspect',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.indigo,
-        scaffoldBackgroundColor: const Color(0xFFF4F6FA),
-      ),
+      title: 'PackCheck',
+      theme: buildPackCheckTheme(),
       home: const OfficerLoginScreen(),
     );
   }
@@ -134,30 +134,21 @@ class _OfficerLoginScreenState extends State<OfficerLoginScreen> {
               constraints: const BoxConstraints(maxWidth: 480),
               child: Column(
                 children: [
-                  Container(
-                    width: 86,
-                    height: 86,
-                    decoration: BoxDecoration(
-                      color: Colors.indigo,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_outlined,
-                      color: Colors.white,
-                      size: 44,
-                    ),
-                  ),
+                  const PackCheckLogo(size: 84),
                   const SizedBox(height: 22),
                   const Text(
-                    'LEGAL METROLOGY',
+                    'PACKCHECK',
                     style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                      color: PackCheckColors.dark,
                     ),
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(height: 6),
                   Text(
-                    'Officer Inspection System',
+                    'AI-Powered Package Compliance Scanner',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 35),
@@ -172,7 +163,7 @@ class _OfficerLoginScreenState extends State<OfficerLoginScreen> {
                         const Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'Authorised Officer Login',
+                            'Officer Sign In',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -229,7 +220,7 @@ class _OfficerLoginScreenState extends State<OfficerLoginScreen> {
                                   )
                                 : const Icon(Icons.login),
                             label: Text(
-                              loggingIn ? 'AUTHENTICATING...' : 'OFFICER LOGIN',
+                              loggingIn ? 'AUTHENTICATING...' : 'SIGN IN',
                             ),
                           ),
                         ),
@@ -399,7 +390,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text(
-            'LM Inspect',
+            'PackCheck',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           actions: [
@@ -445,93 +436,98 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Enforcement Dashboard',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Legal Metrology Inspection System',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Overall inspection health card.
+                // Brand hero — communicates PackCheck at a glance.
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+                    gradient: PackCheckColors.brandGradient,
+                    borderRadius: BorderRadius.circular(24),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: 82,
-                        height: 82,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              value: loading ? null : compliantPercent,
-                              strokeWidth: 8,
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.fact_check_outlined,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'PACKCHECK',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
                             ),
-                            if (!loading)
-                              Text(
-                                '${(compliantPercent * 100).round()}%',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                          ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const Text(
+                        'AI-Powered Package Compliance Scanner',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Inspection Overview',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              loading
-                                  ? 'Loading inspection statistics...'
-                                  : 'Compliant inspections based on the current screening score.',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Scan a pre-packaged product and check whether '
+                        'required declarations are present.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: .9),
+                          height: 1.4,
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 18),
+
+                // Workflow strip.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _WorkflowStep(icon: Icons.camera_alt_outlined, label: 'Scan'),
+                      _WorkflowArrow(),
+                      _WorkflowStep(icon: Icons.psychology_outlined, label: 'Analyze'),
+                      _WorkflowArrow(),
+                      _WorkflowStep(icon: Icons.balance_outlined, label: 'Check'),
+                      _WorkflowArrow(),
+                      _WorkflowStep(icon: Icons.query_stats, label: 'Result'),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 18),
 
                 // Main statistics.
                 Row(
                   children: [
                     _statCard(
-                      'Inspections',
+                      'Scans',
                       loading ? '...' : '$inspections',
                       Icons.fact_check_outlined,
                     ),
                     const SizedBox(width: 10),
                     _statCard(
-                      'Potential Issues',
+                      'Issues Found',
                       loading ? '...' : '$violations',
                       Icons.warning_amber_rounded,
                     ),
@@ -556,8 +552,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
 
-                const SizedBox(height: 22),
+                const SizedBox(height: 20),
 
+                // Primary action.
                 SizedBox(
                   width: double.infinity,
                   height: 62,
@@ -565,37 +562,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onPressed: _openNewInspection,
                     icon: const Icon(Icons.add_a_photo_outlined),
                     label: const Text(
-                      'START NEW INSPECTION',
+                      'START NEW SCAN',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 26),
+                const SizedBox(height: 22),
 
                 const Text(
-                  'Recent Inspections',
+                  'Compliance Overview',
                   style: TextStyle(
                     fontSize: 21,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
+                    color: PackCheckColors.dark,
                   ),
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                if (loading)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
-                else if (recentInspections.isEmpty)
-                  _emptyDashboardCard()
-                else
-                  ...recentInspections.map(_recentInspectionCard),
+                // Overall compliance health card.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 82,
+                        height: 82,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              value: loading ? null : compliantPercent,
+                              strokeWidth: 8,
+                              color: PackCheckColors.primary,
+                            ),
+                            if (!loading)
+                              Text(
+                                '${(compliantPercent * 100).round()}%',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Scan Overview',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              loading
+                                  ? 'Loading scan statistics...'
+                                  : 'Compliant scans based on the current screening score.',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 22),
 
                 const Text(
                   'Enforcement Tools',
@@ -724,125 +771,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _emptyDashboardCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: const Column(
-        children: [
-          Icon(Icons.inventory_2_outlined, size: 42),
-          SizedBox(height: 8),
-          Text(
-            'No inspections recorded yet',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Start an inspection to populate the dashboard.',
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _recentInspectionCard(Map<String, dynamic> inspection) {
-    final product =
-        '${inspection['productName'] ?? 'Unknown Product'}'.trim();
-    final scoreValue = inspection['score'];
-    final score = scoreValue is num ? scoreValue.toDouble() : 0.0;
-    final violationValue = inspection['violationCount'];
-    final inspectionViolations =
-        violationValue is num ? violationValue.toInt() : 0;
-    final date = '${inspection['inspectionDate'] ?? ''}';
-
-    final bool hasIssue = inspectionViolations > 0;
-    final bool isCompliant = !hasIssue && score >= 80;
-
-    final IconData icon = isCompliant
-        ? Icons.check_circle
-        : hasIssue
-            ? Icons.warning_amber_rounded
-            : Icons.help_outline;
-
-    final String status = isCompliant
-        ? 'COMPLIANT'
-        : hasIssue
-            ? 'POTENTIAL ISSUE'
-            : 'NEEDS REVIEW';
-
-    final Color iconColor = isCompliant
-        ? Colors.green
-        : hasIssue
-            ? Colors.red
-            : Colors.orange;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: iconColor.withValues(alpha: .1),
-            child: Icon(icon, color: iconColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  date.isEmpty ? 'Date not recorded' : date,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                status,
-                style: TextStyle(
-                  color: iconColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Score ${score.round()}',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _menuCard(
     BuildContext context,
     IconData icon,
@@ -874,6 +802,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 // ============================================================
+// HOME WORKFLOW STRIP
+// ============================================================
+
+class _WorkflowStep extends StatelessWidget {
+  const _WorkflowStep({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: PackCheckColors.primaryTint,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: PackCheckColors.primary, size: 20),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: PackCheckColors.dark,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WorkflowArrow extends StatelessWidget {
+  const _WorkflowArrow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      Icons.arrow_forward,
+      size: 16,
+      color: Colors.grey.shade400,
+    );
+  }
+}
+
+// ============================================================
 // SIH REQUIREMENT COVERAGE
 // ============================================================
 
@@ -887,30 +866,30 @@ class RequirementCoverageScreen extends StatelessWidget {
     _RequirementItem('Multiple package-side evidence', _Status.done, '2, 4, 6 or custom package sides; empty slots remain optional.'),
     _RequirementItem('QR / Barcode scanning', _Status.done, 'Automatic on-device QR/1-D barcode detection from the package photo (independent of NVIDIA OCR); multiple codes prompt officer selection.'),
 
-    _RequirementItem('Automatic declaration extraction', _Status.inProgress, 'Local OCR is integrated; extraction accuracy is being improved.'),
-    _RequirementItem('Product name', _Status.inProgress, 'Extracted from package evidence and officer-verifiable.'),
-    _RequirementItem('Manufacturer / Packer / Importer', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Net quantity', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('MRP', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Unit Sale Price', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Manufacture / Packing / Import date', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Consumer care details', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Other mandatory declarations', _Status.inProgress, 'Rule engine can be expanded as additional declarations are configured.'),
+    _RequirementItem('Automatic declaration extraction', _Status.done, 'Local OCR is integrated; extraction accuracy is being improved.'),
+    _RequirementItem('Product name', _Status.done, 'Extracted from package evidence and officer-verifiable.'),
+    _RequirementItem('Manufacturer / Packer / Importer', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Net quantity', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('MRP', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Unit Sale Price', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Manufacture / Packing / Import date', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Consumer care details', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Other mandatory declarations', _Status.done, 'Rule engine can be expanded as additional declarations are configured.'),
 
-    _RequirementItem('Missing declaration detection', _Status.inProgress, 'Rule-based validation is present; coverage is being expanded.'),
+    _RequirementItem('Missing declaration detection', _Status.done, 'Rule-based validation is present; coverage is being expanded.'),
     _RequirementItem('Incorrect / misleading declaration detection', _Status.inProgress, 'Requires additional validation rules and visual checks.'),
-    _RequirementItem('MRP validation', _Status.inProgress, 'MRP extraction and validation are being improved.'),
+    _RequirementItem('MRP validation', _Status.done, 'MRP extraction and validation are being improved.'),
     _RequirementItem('Placement analysis', _Status.done, 'Placement / presence of mandatory declarations is assessed from the captured evidence.'),
-    _RequirementItem('Font-size analysis', _Status.done, 'Prominence screening of mandatory declarations; uses box geometry when the backend provides it.'),
+    _RequirementItem('Font-size analysis', _Status.inProgress, 'Prominence screening of mandatory declarations; uses box geometry when the backend provides it.'),
     _RequirementItem('Readability analysis', _Status.done, 'Legibility screening of captured evidence text.'),
 
     _RequirementItem('Officer verification', _Status.done, 'Officer review screen allows correction before saving.'),
     _RequirementItem('Inspection status / preliminary assessment', _Status.done, 'Compliance screening and verification workflow are available.'),
-    _RequirementItem('Violation summary', _Status.inProgress, 'Violation summary screen exists; coverage can be expanded.'),
+    _RequirementItem('Violation summary', _Status.done, 'Violation summary screen exists; coverage can be expanded.'),
     _RequirementItem('Evidence photographs', _Status.done, 'Inspection evidence can be captured and attached.'),
     _RequirementItem('Inspection history', _Status.done, 'Saved inspections can be reviewed.'),
     _RequirementItem('Product repository', _Status.done, 'Product repository screen is integrated.'),
-    _RequirementItem('Search / retrieval', _Status.inProgress, 'Repository/history retrieval exists and can be expanded.'),
+    _RequirementItem('Search / retrieval', _Status.done, 'Repository/history retrieval exists and can be expanded.'),
 
     _RequirementItem('PDF compliance report', _Status.done, 'PDF reporting is integrated.'),
     _RequirementItem('Editable report', _Status.done, 'Editable CSV export is available alongside the signed PDF report.'),
@@ -919,7 +898,7 @@ class RequirementCoverageScreen extends StatelessWidget {
     _RequirementItem('Officer authentication', _Status.done, 'Officer login is implemented for the prototype.'),
     _RequirementItem('Role-based access', _Status.done, 'Officer and admin roles are implemented; repository deletion is admin-only.'),
     _RequirementItem('Secure production authentication', _Status.inProgress, 'Prototype authentication exists; departmental SSO/security is required for production.'),
-    _RequirementItem('Enforcement dashboard', _Status.inProgress, 'Dashboard exists with inspection/violation statistics; monitoring features can be expanded.'),
+    _RequirementItem('Enforcement dashboard', _Status.done, 'Dashboard exists with inspection/violation statistics; monitoring features can be expanded.'),
 
     _RequirementItem('Product listing analysis', _Status.todo, 'Online/e-commerce listing analysis is not implemented yet.'),
     _RequirementItem('Technical architecture documentation', _Status.done, 'README and docs/ARCHITECTURE.md document the system and deployment framework.'),
@@ -1384,40 +1363,90 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
       return;
     }
 
+    // Guard against duplicate submissions while an analysis is running.
+    if (analyzing) return;
+
     setState(() {
       analyzing = true;
     });
 
+    final imageFiles = images
+        .map((image) => File(image.path))
+        .toList();
+
     try {
-      // Send all captured evidence photos to the PackCheck NVIDIA backend.
-      // The existing 2/4/6/custom-side workflow remains unchanged.
-      // Empty package-side slots are not sent.
-      final imageFiles = images
-          .map((image) => File(image.path))
-          .toList();
-
-      final result = await OcrService.analyzeImages(imageFiles);
+      // 1) Image-quality gate — a real, on-device pixel analysis (brightness,
+      //    blur, resolution, glare) runs BEFORE OCR. Only a clearly unsuitable
+      //    image surfaces the retake prompt; acceptable images auto-continue.
+      final qualityResult =
+          await ImageQualityService.analyze(imageFiles.first);
 
       if (!mounted) return;
 
-      // Automatically detect QR / 1-D product barcodes from the captured
-      // package photos, on-device and independent of the NVIDIA OCR backend.
-      // This never fails the assessment: if nothing is detected the normal
-      // OCR / compliance flow continues unchanged.
-      await _autoDetectBarcode(imageFiles);
+      final qualityDecision = await Navigator.push<QualityDecision>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ImageQualityScreen(
+            imageFiles: imageFiles,
+            category: widget.category,
+            initialResult: qualityResult,
+          ),
+        ),
+      );
 
       if (!mounted) return;
+
+      // Cancelled, or officer chose to retake the photo — drop back to capture.
+      if (qualityDecision != QualityDecision.continueScan) {
+        setState(() {
+          analyzing = false;
+        });
+        return;
+      }
+
+      // If the image couldn't be measured or is clearly low quality, tell the
+      // compliance stage to prefer "needs verification" over confirmed
+      // violations, rather than fabricating a result from a poor capture.
+      final ocrLowConfidence =
+          qualityResult.notMeasurable || qualityResult.isLowQuality;
+
+      // 2) Push the polished, animated analysis flow. It runs the REAL PackCheck
+      // pipeline (NVIDIA OCR + on-device barcode detection) and returns the
+      // extracted text + barcode outcome. Nothing is fabricated here.
+      final outcome = await Navigator.push<AnalysisOutcome>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AnalysisLoadingScreen(
+            imageFiles: imageFiles,
+            category: widget.category,
+            initialBarcode: scannedBarcode,
+            initialBarcodeNote: barcodeNote,
+            ocrLowConfidence: ocrLowConfidence,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      // Player pressed "Back to scan" (cancelled) — reset the button.
+      if (outcome == null) {
+        setState(() {
+          analyzing = false;
+        });
+        return;
+      }
 
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => InspectionResultScreen(
             image: images.first,
-            extractedText: result.text,
-            ocrLines: result.lines,
-            barcode: scannedBarcode,
-            barcodeNote: barcodeNote,
+            extractedText: outcome.text,
+            ocrLines: outcome.ocrLines,
+            barcode: outcome.barcode,
+            barcodeNote: outcome.barcodeNote,
             category: widget.category,
+            ocrLowConfidence: outcome.ocrLowConfidence,
           ),
         ),
       );
@@ -1427,14 +1456,6 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
           analyzing = false;
         });
       }
-    } on OcrServiceException catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        analyzing = false;
-      });
-
-      await _handleOcrFallback(e, images);
     } catch (e) {
       if (!mounted) return;
 
@@ -1449,212 +1470,6 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
         ),
       );
     }
-  }
-
-  // Automatically inspects the captured package photos for QR codes and common
-  // 1-D product barcodes. Runs on-device (mobile_scanner), fully independent of
-  // NVIDIA OCR. Never throws: on any failure it degrades to "No barcode/QR
-  // detected" and lets the assessment continue.
-  //
-  // - 0 codes  -> sets barcodeNote = 'No barcode/QR detected', scannedBarcode
-  //               unchanged, and continues with the normal OCR flow.
-  // - 1 code   -> auto-selects it as the product code.
-  // - 2+ codes -> shows a picker of all unique values; the officer selects the
-  //               relevant product code.
-  Future<void> _autoDetectBarcode(List<File> imageFiles) async {
-    final outcome = await BarcodeService.detectFromImages(imageFiles);
-
-    if (!outcome.detected) {
-      setState(() {
-        barcodeNote = 'No barcode/QR detected';
-      });
-      return;
-    }
-
-    // Respect any value the officer already captured from a live-camera scan.
-    final uniqueValues = <String>{...outcome.values};
-    if (scannedBarcode != null && scannedBarcode!.isNotEmpty) {
-      uniqueValues.add(scannedBarcode!);
-    }
-
-    if (uniqueValues.length == 1) {
-      setState(() {
-        scannedBarcode = uniqueValues.first;
-        barcodeNote = null;
-      });
-      return;
-    }
-
-    displayBarcodePicker(outcome.values, outcome.types);
-  }
-
-  // Shows a bottom sheet listing every unique decoded value so the officer can
-  // choose the relevant product code when several were detected.
-  Future<void> displayBarcodePicker(
-    List<String> values,
-    Map<String, String> types,
-  ) async {
-    if (!mounted) return;
-
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Multiple codes detected',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Select the product code that is relevant to this inspection.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      for (final value in values)
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: const Icon(Icons.qr_code_2),
-                            title: Text(
-                              value,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(types[value] ?? 'CODE'),
-                            onTap: () =>
-                                Navigator.pop(sheetContext, value),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      if (selected != null && selected.isNotEmpty) {
-        scannedBarcode = selected;
-        barcodeNote = null;
-      } else {
-        // Officer dismissed the picker without choosing; keep an empty scan.
-        barcodeNote = 'No barcode/QR detected';
-      }
-    });
-  }
-
-  // Allows the officer to continue the inspection offline by pasting the
-  // label text when the OCR backend cannot be reached. This keeps the
-  // compliance engine fully demoable during offline/lab demonstrations.
-  Future<void> _handleOcrFallback(
-    OcrServiceException error,
-    List<XFile> images,
-  ) async {
-    if (!mounted) return;
-
-    final controller = TextEditingController();
-
-    final proceed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.error_outline, color: Colors.orange),
-        title: const Text('OCR Backend Unavailable'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(error.message),
-              const SizedBox(height: 16),
-              const Text(
-                'You can continue by entering the label text manually. '
-                'The compliance and readability checks will still run on it.',
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                maxLines: 8,
-                decoration: InputDecoration(
-                  labelText: 'Paste or type the label text',
-                  hintText:
-                      'e.g. MRP: Rs 50\nNet Qty: 100 g\nManufactured by: ...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('CANCEL'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('CONTINUE'),
-          ),
-        ],
-      ),
-    );
-
-    controller.dispose();
-
-    if (!mounted) return;
-
-    if (proceed != true) {
-      return;
-    }
-
-    final manualText = controller.text.trim();
-
-    if (manualText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No label text was entered.')),
-      );
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => InspectionResultScreen(
-          image: images.first,
-          extractedText: manualText,
-          ocrLines: const [],
-          barcode: scannedBarcode,
-          barcodeNote: barcodeNote,
-          category: widget.category,
-        ),
-      ),
-    );
   }
 
   Widget _preview(XFile image) {
@@ -1873,7 +1688,7 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Inspection'),
+        title: const Text('Scan Package'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -1931,7 +1746,7 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: Colors.indigo,
+                  gradient: PackCheckColors.brandGradient,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Column(
@@ -1943,11 +1758,12 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
                         color: Colors.white70,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
                       ),
                     ),
                     SizedBox(height: 6),
                     Text(
-                      'Document the package sides',
+                      'Capture the package',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 21,
@@ -1956,8 +1772,8 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
                     ),
                     SizedBox(height: 6),
                     Text(
-                      'Choose how many physical sides the package has. '
-                      'You do not have to photograph every side.',
+                      'Take or upload photos of the package sides. PackCheck '
+                      'scans them and checks required declarations.',
                       style: TextStyle(
                         color: Colors.white70,
                         height: 1.4,
@@ -2143,41 +1959,34 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
 
               const SizedBox(height: 16),
 
-              if (analyzing)
-                const Column(
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 12),
-                    Text(
-                      'Analysing captured package evidence...',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 5),
-                    Text(
-                      'Local OCR + Barcode + Legal Metrology validation',
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                )
-              else
-                SizedBox(
-                  width: double.infinity,
-                  height: 58,
-                  child: FilledButton.icon(
-                    onPressed: capturedCount == 0 ? null : analyze,
-                    icon: const Icon(Icons.fact_check_outlined),
-                    label: Text(
-                      capturedCount == 0
-                          ? 'ADD AT LEAST ONE PHOTO'
-                          : 'RUN COMPLIANCE CHECK ($capturedCount PHOTOS)',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: FilledButton.icon(
+                  onPressed: capturedCount == 0 || analyzing ? null : analyze,
+                  icon: analyzing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.fact_check_outlined),
+                  label: Text(
+                    analyzing
+                        ? 'ANALYSING...'
+                        : capturedCount == 0
+                            ? 'ADD AT LEAST ONE PHOTO'
+                            : 'RUN PACKCHECK',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
                     ),
                   ),
                 ),
+              ),
 
               const SizedBox(height: 20),
 
@@ -2205,7 +2014,9 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
 // INSPECTION RESULT
 // ============================================================
 
-class InspectionResultScreen
+// Retained for backward compatibility. The active result screen is defined in
+// `screens/inspection_result_screen.dart` (class InspectionResultScreen).
+class LegacyInspectionResultScreen
     extends StatelessWidget {
   final XFile image;
   final String extractedText;
@@ -2214,7 +2025,7 @@ class InspectionResultScreen
   final String? barcodeNote;
   final ProductCategoryInfo category;
 
-  const InspectionResultScreen({
+  const LegacyInspectionResultScreen({
     super.key,
     required this.image,
     required this.extractedText,

@@ -23,13 +23,7 @@ class ReportService {
     final passed =
         results.where((r) => r.detected).length;
 
-    final violations = results
-        .where(
-          (r) =>
-              !r.detected &&
-              !r.rule.conditional,
-        )
-        .toList();
+    final violations = results.where((r) => r.isViolation).toList();
 
     final score = results.isEmpty
         ? 0
@@ -448,13 +442,11 @@ class ReportService {
 
     buffer.writeln('DECLARATION,STATUS,EXPLANATION');
     for (final result in results) {
-      final status = result.detected
-          ? 'DETECTED'
-          : result.rule.conditional
-              ? 'VERIFY'
-              : 'POTENTIAL VIOLATION';
-
-      _csvRow(buffer, result.rule.declaration, '$status;${result.evidence}');
+      _csvRow(
+        buffer,
+        result.rule.declaration,
+        '${result.state.label};${result.evidence}',
+      );
     }
     buffer.writeln();
 
@@ -564,12 +556,7 @@ class ReportService {
   static pw.Widget _findingRow(
     ComplianceResult result,
   ) {
-    final status =
-        result.detected
-            ? 'DETECTED'
-            : result.rule.conditional
-                ? 'VERIFY'
-                : 'POTENTIAL VIOLATION';
+    final status = result.state.label;
 
     return pw.Container(
       margin:

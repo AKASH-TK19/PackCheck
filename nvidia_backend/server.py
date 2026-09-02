@@ -1,10 +1,19 @@
 import os
 import base64
+import logging
 import tempfile
 import requests
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from dotenv import load_dotenv
+
+# Clear, structured server-side logging so OCR/backed errors are visible in the
+# console (the FastAPI default is silent on these helper error paths).
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("packcheck-ocr")
 
 # RapidOCR is a free, offline OCR engine (ONNXRuntime). No API key required.
 # It is imported lazily so the server still runs if the package is missing.
@@ -144,6 +153,7 @@ async def analyze(images: list[UploadFile] = File(...)):
 
     if not NVIDIA_API_KEY:
         # No key, no point calling NVIDIA: serve the offline OCR result.
+        log.warning("NVIDIA_API_KEY missing; serving offline RapidOCR text only.")
         if not fallback_text:
             raise HTTPException(
                 status_code=503,
@@ -265,6 +275,7 @@ Rules:
             timeout=120,
         )
     except Exception as exc:  # network / timeout -> offline fallback
+        log.error("NVIDIA request failed (network/timeout): %s", exc)
         if not fallback_text:
             raise HTTPException(
                 status_code=503,
@@ -281,6 +292,11 @@ Rules:
         # Rate limit, quota exhausted (503), auth error, etc. Instead of
         # failing the whole request, serve the free offline OCR result so the
         # inspection flow still produces text and readable/placement checks.
+        log.warning(
+            "NVIDIA returned HTTP %s: %s — falling back to offline RapidOCR.",
+            response.status_code,
+            response.text[:200],
+        )
         if not fallback_text:
             raise HTTPException(
                 status_code=response.status_code,
@@ -303,6 +319,8 @@ Rules:
         result["choices"][0]["message"]["content"]
         .strip()
     )
+
+    log.info("NVIDIA OCR succeeded (source=nvidia, chars=%d)", len(text))
 
     return {
         "result": text,
