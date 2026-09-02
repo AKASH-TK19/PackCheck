@@ -120,10 +120,37 @@ class ComplianceEngine {
   static int issueCount(List<ComplianceResult> results) =>
       results.where((r) => !r.isDetected).length;
 
-  /// Score out of 100 = detected / total * 100. Returns 0 for an empty list.
+  /// Severity-aware score out of 100.
+  ///
+  /// Each check is weighted by its declared severity so a missing HIGH-priority
+  /// declaration (e.g. MRP, net quantity) dents the score far more than a minor
+  /// MEDIUM gap. A HIGH check weighs 3x a MEDIUM check. Returns 0 for an empty
+  /// list.
   static int score(List<ComplianceResult> results) {
     if (results.isEmpty) return 0;
-    return ((passedCount(results) / results.length) * 100).round();
+
+    var detectedWeight = 0;
+    var totalWeight = 0;
+    for (final result in results) {
+      final weight = _severityWeight(result.rule.severity);
+      totalWeight += weight;
+      if (result.isDetected) detectedWeight += weight;
+    }
+
+    if (totalWeight == 0) return 0;
+    return ((detectedWeight / totalWeight) * 100).round();
+  }
+
+  /// Relative importance of a rule's severity string. HIGH outranks MEDIUM.
+  static int _severityWeight(String severity) {
+    switch (severity) {
+      case 'HIGH':
+        return 3;
+      case 'MEDIUM':
+        return 1;
+      default:
+        return 1;
+    }
   }
 
   /// Maps 0..100 score to the green / amber / red verdict band.
@@ -235,12 +262,12 @@ class ComplianceEngine {
       if (!mrpLabel.hasMatch(lines[i])) continue;
 
       // The value may be on the same line, immediately after MRP.
-      final sameLine = amount.firstMatch(
-        lines[i].substring(
-          mrpLabel.firstMatch(lines[i])!.end,
-        ),
+      final remainder = lines[i].substring(
+        mrpLabel.firstMatch(lines[i])!.end,
       );
-      if (sameLine != null) {
+      final sameLine = amount.firstMatch(remainder);
+      if (sameLine != null &&
+          !_amountFollowedByNonPrice(remainder.substring(sameLine.end))) {
         return '₹${sameLine.group(1)}';
       }
 
@@ -260,7 +287,8 @@ class ComplianceEngine {
         }
 
         final match = amount.firstMatch(next);
-        if (match != null) {
+        if (match != null &&
+            !_amountFollowedByNonPrice(next.substring(match.end))) {
           return '₹${match.group(1)}';
         }
       }
@@ -402,7 +430,8 @@ class ComplianceEngine {
       for (var j = i; j <= i + 3 && j < lines.length; j++) {
         final match = datePattern.firstMatch(lines[j]);
         if (match != null) {
-          return _cleanLine(match.group(1)!);
+          final value = _cleanLine(match.group(1)!);
+          if (_plausibleDate(value)) return value;
         }
       }
     }
@@ -419,9 +448,9 @@ class ComplianceEngine {
       caseSensitive: false,
     ).firstMatch(text);
 
-    return collapsed == null
-        ? 'Not detected'
-        : _cleanLine(collapsed.group(1)!);
+    if (collapsed == null) return 'Not detected';
+    final collapsedValue = _cleanLine(collapsed.group(1)!);
+    return _plausibleDate(collapsedValue) ? collapsedValue : 'Not detected';
   }
 
 
@@ -446,7 +475,10 @@ class ComplianceEngine {
 
     for (final pattern in patterns) {
       final match = pattern.firstMatch(text);
-      if (match != null) return _cleanDeclaration(match.group(1)!);
+      if (match != null) {
+        final value = _cleanDeclaration(match.group(1)!);
+        if (_plausibleDate(value)) return value;
+      }
     }
 
     return 'Not detected';
@@ -531,6 +563,48 @@ class ComplianceEngine {
 
   static String _cleanLine(String value) {
     return value.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Rejects a captured amount when the text right after the number looks like a
+  /// quantity/unit/date rather than a price (e.g. "200 g", "20/12/2025").
+  static bool _amountFollowedByNonPrice(String afterNumber) {
+    final tail = afterNumber.trimLeft();
+    if (tail.isEmpty) return false;
+    if (RegExp(r'^(?:mg|g|kg|ml|l|litre|liter|cm|m|pcs?|pieces?|nos\.?|numbers?|units?)\b',
+        caseSensitive: false).hasMatch(tail)) {
+      return true;
+    }
+    if (RegExp(r'^[\/\-.]\s*\d{1,4}|^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
+        caseSensitive: false).hasMatch(tail)) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Coarse sanity check for an extracted date string. Rejects plainly
+  /// impossible values (day > 31, month > 12) while never rejecting the
+  /// "Best before 12 months" style non-date phrasing. `fullMatch` anchors both
+  /// ends, so an embedded `$` anchor is not required.
+  static bool _plausibleDate(String value) {
+    final v = value.trim();
+
+    final numeric = RegExp(r'(\d{1,2})[\/\-.](\d{1,2})[\/\-.]\d{2,4}').firstMatch(v);
+    if (numeric != null && numeric.start == 0 && numeric.end == v.length) {
+      final day = int.tryParse(numeric.group(1)!) ?? -1;
+      final month = int.tryParse(numeric.group(2)!) ?? -1;
+      return day >= 1 && day <= 31 && month >= 1 && month <= 12;
+    }
+
+    final monthName = RegExp(
+        r'(\d{1,2})\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|'
+        r'jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{2,4})',
+        caseSensitive: false).firstMatch(v);
+    if (monthName != null && monthName.start == 0 && monthName.end == v.length) {
+      final day = int.tryParse(monthName.group(1)!) ?? -1;
+      return day >= 1 && day <= 31;
+    }
+
+    return true;
   }
 
   static List<ComplianceResult> _validate(

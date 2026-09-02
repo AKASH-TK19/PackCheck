@@ -11,7 +11,7 @@ import '../services/ocr_service.dart';
 import '../services/readability_service.dart';
 import '../services/report_service.dart';
 import '../theme/app_theme.dart';
-import '../main.dart' show OfficerVerificationScreen;
+import 'officer_verification_screen.dart';
 
 /// The PackCheck result screen — the visual centrepiece of the app.
 ///

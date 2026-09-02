@@ -60,7 +60,7 @@ class ReportService {
                 pw.Text(
                   'LEGAL METROLOGY',
                   style: pw.TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight:
                         pw.FontWeight.bold,
                   ),
@@ -68,7 +68,7 @@ class ReportService {
                 pw.Text(
                   'INSPECTION REPORT',
                   style: pw.TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -107,7 +107,7 @@ class ReportService {
             pw.Text(
               'PACKAGED COMMODITY INSPECTION',
               style: pw.TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight:
                     pw.FontWeight.bold,
               ),
@@ -118,7 +118,7 @@ class ReportService {
             pw.Text(
               'Automated screening with officer verification',
               style: const pw.TextStyle(
-                fontSize: 12,
+                fontSize: 11,
               ),
             ),
 
@@ -213,7 +213,7 @@ class ReportService {
               ),
 
               pw.Container(
-                height: 250,
+                height: 150,
                 width: double.infinity,
                 alignment:
                     pw.Alignment.center,
@@ -281,7 +281,7 @@ class ReportService {
                         result.evidence,
                         style:
                             const pw.TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -304,7 +304,7 @@ class ReportService {
                   'No configured declaration violations detected during automated screening.',
                   style:
                       const pw.TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                   ),
                 ),
               ),
@@ -334,7 +334,7 @@ class ReportService {
                     : extractedText,
                 style:
                     const pw.TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                 ),
               ),
             ),
@@ -360,11 +360,11 @@ class ReportService {
               ),
             ),
 
-            pw.SizedBox(height: 30),
+            pw.SizedBox(height: 14),
 
             _sectionTitle('SIGNATURES'),
 
-            pw.SizedBox(height: 70),
+            pw.SizedBox(height: 24),
 
             pw.Row(
               crossAxisAlignment:
@@ -497,7 +497,7 @@ class ReportService {
       child: pw.Text(
         title,
         style: pw.TextStyle(
-          fontSize: 13,
+          fontSize: 12,
           fontWeight:
               pw.FontWeight.bold,
         ),
@@ -530,7 +530,7 @@ class ReportService {
                   style: pw.TextStyle(
                     fontWeight:
                         pw.FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: 10,
                   ),
                 ),
               ),
@@ -542,7 +542,7 @@ class ReportService {
                   row[1],
                   style:
                       const pw.TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                   ),
                 ),
               ),
@@ -587,7 +587,7 @@ class ReportService {
                   style: pw.TextStyle(
                     fontWeight:
                         pw.FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: 10,
                   ),
                 ),
               ),
@@ -601,12 +601,12 @@ class ReportService {
               ),
             ],
           ),
-          pw.SizedBox(height: 4),
+          pw.SizedBox(height: 3),
           pw.Text(
             result.evidence,
             style:
                 const pw.TextStyle(
-              fontSize: 10,
+              fontSize: 9,
             ),
           ),
         ],
