@@ -32,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE inspections (
@@ -47,7 +47,8 @@ class DatabaseService {
             officerId TEXT,
             location TEXT,
             officerRemarks TEXT,
-            verified INTEGER DEFAULT 0
+            verified INTEGER DEFAULT 0,
+            productCategory TEXT
           )
         ''');
       },
@@ -73,6 +74,12 @@ class DatabaseService {
             'ALTER TABLE inspections ADD COLUMN verified INTEGER DEFAULT 0',
           );
         }
+
+        if (oldVersion < 3) {
+          await db.execute(
+            'ALTER TABLE inspections ADD COLUMN productCategory TEXT',
+          );
+        }
       },
     );
   }
@@ -94,6 +101,7 @@ class DatabaseService {
     String? officerId,
     String? location,
     String? officerRemarks,
+    String? productCategory,
     bool verified = false,
   }) async {
     final db = await database;
@@ -111,6 +119,7 @@ class DatabaseService {
         'officerId': officerId,
         'location': location,
         'officerRemarks': officerRemarks,
+        'productCategory': productCategory,
         'verified': verified ? 1 : 0,
       },
     );
@@ -286,8 +295,10 @@ class DatabaseService {
         OR extractedText LIKE ?
         OR officerId LIKE ?
         OR location LIKE ?
+        OR productCategory LIKE ?
       ''',
       whereArgs: [
+        search,
         search,
         search,
         search,

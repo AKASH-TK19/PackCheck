@@ -16,6 +16,7 @@ class ReportService {
     required String imagePath,
     String? barcode,
     String? barcodeNote,
+    String? category,
   }) async {
     final pdf = pw.Document();
 
@@ -162,6 +163,12 @@ class ReportService {
             ),
 
             _infoTable([
+              [
+                'Product Category',
+                (category == null || category.isEmpty)
+                    ? 'Not selected'
+                    : category
+              ],
               [
                 'Product Name',
                 product.productName
@@ -404,6 +411,7 @@ class ReportService {
     required String imagePath,
     String? barcode,
     String? barcodeNote,
+    String? category,
   }) async {
     final buffer = StringBuffer();
 
@@ -413,6 +421,11 @@ class ReportService {
     buffer.writeln();
 
     buffer.writeln('FIELD,VALUE');
+    _csvRow(
+      buffer,
+      'Product Category',
+      (category == null || category.isEmpty) ? 'Not selected' : category,
+    );
     _csvRow(buffer, 'Product Name', product.productName);
     _csvRow(
       buffer,

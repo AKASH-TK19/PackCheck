@@ -1,5 +1,6 @@
 import '../data/compliance_rules.dart';
 import '../models/compliance_rule.dart';
+import '../models/product_category.dart';
 import 'unit_sale_price_service.dart';
 
 class ExtractedProductData {
@@ -37,7 +38,16 @@ class ComplianceAnalysis {
 }
 
 class ComplianceEngine {
-  static ComplianceAnalysis analyzeFull(String text) {
+  /// Runs the compliance engine for a category (or with no category context).
+  ///
+  /// When [category] is provided, only the rules applicable to that category are
+  /// evaluated — food-specific checks are NOT applied to non-food categories
+  /// (garments, electronics, cosmetics, etc.). This keeps the engine as a
+  /// multi-category packaged-product compliance scanner.
+  static ComplianceAnalysis analyzeFull(
+    String text, {
+    ProductCategoryInfo? category,
+  }) {
     final normalized = text
         .replaceAll('\r', '\n')
         .replaceAll('\u00A0', ' ')
@@ -67,9 +77,11 @@ class ComplianceEngine {
       consumerCare: consumerCare,
     );
 
+    final rules = ComplianceRules.rulesForCategory(category);
+
     return ComplianceAnalysis(
       product: product,
-      results: _validate(lower, product),
+      results: _validate(lower, product, rules),
     );
   }
 
@@ -480,6 +492,7 @@ class ComplianceEngine {
   static List<ComplianceResult> _validate(
     String text,
     ExtractedProductData product,
+    List<ComplianceRule> rules,
   ) {
     final results = <ComplianceResult>[];
 
@@ -494,7 +507,7 @@ class ComplianceEngine {
       caseSensitive: false,
     ).hasMatch(text);
 
-    for (final rule in ComplianceRules.rules) {
+    for (final rule in rules) {
       bool detected = false;
       String evidence = '';
 
@@ -579,6 +592,163 @@ class ComplianceEngine {
 
           detected = unitPrice.detected;
           evidence = unitPrice.explanation;
+          break;
+
+        // ===== Readymade Garments / Hosiery =====
+        case 'CAT-GAR-01':
+          detected = RegExp(
+            r'\b(size|fit)\b.{0,24}\b(s|m|l|xl|xxl|xxxl|\d{1,3})\b'
+            r'|\b(s|m|l|xl|xxl|xxxl)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Size / fit declaration detected on the garment label.'
+              : 'Size / fit declaration not detected on the garment label.';
+          break;
+
+        case 'CAT-GAR-02':
+          detected = RegExp(
+            r'\b(?:cotton|polyester|nylon|wool|silk|rayon|viscose|'
+            r'elastane|spandex|linen|blend|composition|fiber|fibre)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Fiber composition / material content detected.'
+              : 'Fiber composition / material content not detected.';
+          break;
+
+        case 'CAT-GAR-03':
+          detected = RegExp(
+            r'\b(?:wash\s*(?:care|ing)?|machine\s*wash|do\s+not\s+bleach|'
+            r'iron|cool\s+iron|dry\s+clean|cold\s+wash|hand\s+wash)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Washing / care instructions detected.'
+              : 'Washing / care instructions not detected.';
+          break;
+
+        // ===== Electronics =====
+        case 'CAT-ELC-01':
+          detected = RegExp(
+            r'\b(model|serial|s/n|s\.n\.|part\s+no)\b.{0,24}[A-Za-z0-9\-]{2,}',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Model / serial number detected.'
+              : 'Model / serial number not detected.';
+          break;
+
+        case 'CAT-ELC-02':
+        case 'CAT-ELE-03':
+          detected = RegExp(
+            r'\b(warrant(y|ies)|guarantee|guaranty)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Warranty / guarantee declaration detected.'
+              : 'Warranty / guarantee declaration not detected.';
+          break;
+
+        case 'CAT-ELC-03':
+          detected = RegExp(
+            r'\b(imported\s*by|marketed\s*by|authorized\s*re|'
+            r'authorised\s*re|importer)\b.{0,60}',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Importer / authorised representative detail detected.'
+              : 'Importer / authorised representative detail not detected.';
+          break;
+
+        // ===== Electrical =====
+        case 'CAT-ELE-01':
+          detected = RegExp(
+            r'\b(\d{1,3}\s*v|voltage|volts|watt|wattage|\d+\s*w|\d+\s*amps|'
+            r'hz|amp)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Voltage / rating declaration detected.'
+              : 'Voltage / rating declaration not detected.';
+          break;
+
+        case 'CAT-ELE-02':
+          detected = RegExp(
+            r'\b(isi[^a-z]|is\s*(?:mark|certified)|certification\s*mark|'
+            r'\bis\s*\d{4,}\b)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Safety / certification mark detected.'
+              : 'Safety / certification mark not detected; verify applicability.';
+          break;
+
+        // ===== Cosmetics / Personal Care =====
+        case 'CAT-COS-01':
+          detected = RegExp(
+            r'\b(ingredients?|composition|aqua|paraben|glycer|'
+            r'alcohol|sodium|glycol)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Ingredients / composition declaration detected.'
+              : 'Ingredients / composition declaration not detected.';
+          break;
+
+        case 'CAT-COS-02':
+          detected = product.manufactureDate != 'Not detected' ||
+              product.expiryDate != 'Not detected';
+          evidence = detected
+              ? 'Manufacture and/or expiry (shelf-life) declaration detected '
+                  '(mfg: ${product.manufactureDate}, expiry: ${product.expiryDate}).'
+              : 'Manufacture and/or expiry (shelf-life) declaration not detected.';
+          break;
+
+        case 'CAT-COS-03':
+          detected = RegExp(
+            r'\b(?:cosmetic\s*license|license\s*no|lic\s*no|'
+            r'bo\s*no|batch\s*no|mfg[\s.:-]*lic|approval\s*no|'
+            r'cdsco|iso\s*\d{4,})\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Manufacturing license / regulatory authority detected.'
+              : 'Manufacturing license / regulatory authority not detected; verify applicability.';
+          break;
+
+        // ===== Household Products =====
+        case 'CAT-HSE-01':
+          detected = RegExp(
+            r'\b(usage|instructions?|how\s*to\s*use|directions?|'
+            r'dosage|application)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Usage / handling instructions detected.'
+              : 'Usage / handling instructions not detected.';
+          break;
+
+        case 'CAT-HSE-02':
+          detected = RegExp(
+            r'\b(caution|warning|keep\s*out|harmful|poison|'
+            r'corrosive|flammable|first\s*aid)\b',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Caution / safety warning detected.'
+              : 'Caution / safety warning not detected; verify applicability.';
+          break;
+
+        case 'CAT-HSE-03':
+          detected = RegExp(
+            r'\b(batch\s*no|lot\s*no|batch\s*number|lot\s*number|'
+            r'b\.\s*no)\b.{0,24}[A-Za-z0-9\-]{2,}',
+            caseSensitive: false,
+          ).hasMatch(text);
+          evidence = detected
+              ? 'Batch / lot number detected.'
+              : 'Batch / lot number declaration not detected.';
           break;
 
         default:

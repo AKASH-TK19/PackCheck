@@ -36,9 +36,11 @@ listings, detect and validate mandatory declarations, and identify violations.
 | Area | Implementation |
 | --- | --- |
 | Image upload & multi-side capture | Camera / gallery evidence, configurable package sides (2 / 4 / 6 / custom) |
+| Product category gate | Mandatory "Select Product Category" screen before capture/upload; Continue disabled until a category is chosen; category carried through the inspection, result, report (PDF/CSV) and stored in the repository |
+| Multi-category compliance | Category-aware `ComplianceEngine` — universal Legal Metrology rules apply to all categories; food-specific checks only for food/beverage; category-specific declarations for garments, electronics, electrical, cosmetics and household; `Other` is advisory-only and never labelled food-compliant |
 | Barcode / QR scanning | Automatic on-device `mobile_scanner` decoding of the captured package photo (QR + EAN-13 / EAN-8 / UPC-A / Code 128 / Code 39 / ITF-14), independent of the NVIDIA OCR backend; angled/off-centre codes supported; multiple codes prompt the officer to select; "No barcode/QR detected" never fails the assessment |
 | Declaration extraction | NVIDIA vision backend → structured product fields |
-| Rule-based validation | `ComplianceRule` engine (LM-01 … LM-10) covering MRP, net qty, manufacturer, origin, dates, consumer care |
+| Rule-based validation | `ComplianceRule` engine — universal LM rules (LM-01…LM-08) for all categories, food rules (LM-06, LM-10) for food/beverage, and category-specific rules (garments, electronics, electrical, cosmetics, household); each result is reported as Compliant / Missing Information / Potential Violation |
 | Unit sale price (Rule 6(11)) | `UnitSalePriceService` (percent & per-unit logic) |
 | Multi-pack handling | `MultipackService` |
 | MPE / tolerance | `MpeService` (preliminary tolerance screening) |

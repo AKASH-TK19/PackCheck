@@ -90,6 +90,7 @@ The `inspections` table stores one row per verified inspection:
 | `location` | TEXT | Inspection location |
 | `officerRemarks` | TEXT | Verification remarks |
 | `verified` | INTEGER | 1 when officer-verified |
+| `productCategory` | TEXT | Selected product category label |
 
 ### Declarations (configured rules)
 
@@ -98,10 +99,29 @@ label, expected pattern, whether it is conditional, and a violation description.
 The engine evaluates every configured rule against the extracted text and
 produces a `ComplianceResult` (`detected` / `conditional` / not-detected).
 
+### Product categories
+
+Before any image capture/upload the officer must select a product category on a
+mandatory `ProductCategoryScreen`. The chosen category is carried through the
+whole pipeline and stored in the `productCategory` DB column.
+
+Categories are classified by two flags on `ProductCategoryInfo`:
+
+- `isFood` — food/beverage categories run the food-specific Legal Metrology
+  checks (best-before, unit sale price).
+- `hasCategorySpecificRules` — whether category-specific mandatory declarations
+  are implemented (garments, electronics, electrical, cosmetics, household).
+
+Categories with neither flag (e.g. `Other Packaged Consumer Commodities`) are
+shown as **advisory only** and are never labelled food-compliant. Food-specific
+rules are never applied to non-food categories.
+
 ---
 
 ## 4. Compliance flow
 
+0. **Category** — officer selects the product category on the mandatory
+   `ProductCategoryScreen`; the inspection cannot begin without a selection.
 1. **Capture** — officer photographs package sides (2 / 4 / 6 / custom).
 2. **Barcode / QR (on-device)** — `BarcodeService` automatically decodes any QR
    or common 1-D product barcode from the captured photo via `mobile_scanner`.
@@ -160,12 +180,30 @@ produces a `ComplianceResult` (`detected` / `conditional` / not-detected).
 
 ## 7. Extending the rule engine
 
-New declarations can be added in two places:
+The engine is a **multi-category packaged-product compliance scanner**. Rules are
+grouped into three tiers inside `lib/data/compliance_rules.dart`:
 
-1. `lib/data/compliance_rules.dart` — add a `ComplianceRule` (label, pattern,
-   conditional flag, violation text).
-2. `lib/services/compliance_engine.dart` (and/or the backend prompt) — add the
-   corresponding extraction field.
+- `universalRules` — always applied to every category (manufacturer, net
+  quantity, MRP, consumer care, country of origin, common name, date).
+- `foodRules` — added for food / beverage categories (best-before, unit sale
+  price).
+- category rule lists (`garmentRules`, `electronicsRules`, `electricalRules`,
+  `cosmeticsRules`, `householdRules`) — added per category key.
+
+`ComplianceRules.rulesForCategory(category)` returns the ordered applicable set.
+
+To add a new category or rule:
+
+1. `lib/models/product_category.dart` — add a `ProductCategoryInfo` entry (with a
+   stable `key`, `isFood`, `hasCategorySpecificRules`).
+2. `lib/data/compliance_rules.dart` — add the rule(s) and add them to
+   `rulesForCategory`.
+3. `lib/services/compliance_engine.dart` — add the corresponding evaluation case
+   in `_validate` (keyed by rule `id`).
+
+The `Requirement Coverage` screen in the app tracks each problem-statement
+requirement and its implementation status, so the system can be audited against
+the brief directly.
 
 The `Requirement Coverage` screen in the app tracks each problem-statement
 requirement and its implementation status, so the system can be audited against

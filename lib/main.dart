@@ -7,12 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'models/compliance_rule.dart';
+import 'models/product_category.dart';
 import 'services/barcode_service.dart';
 import 'services/compliance_engine.dart';
 import 'services/database_service.dart';
 import 'services/report_service.dart';
 import 'services/readability_service.dart';
 import 'screens/barcode_scanner_screen.dart';
+import 'screens/product_category_screen.dart';
 import 'services/ocr_service.dart';
 
 void main() {
@@ -352,12 +354,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _openNewInspection() async {
+    // Mandatory product-category gate: the officer must choose a category
+    // before they can capture or upload an image for inspection.
+    final category = await Navigator.push<ProductCategoryInfo>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ProductCategoryScreen(),
+      ),
+    );
+
+    if (category == null) {
+      // User backed out without selecting a category.
+      return;
+    }
+
+    if (!mounted) return;
+
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const NewInspectionScreen(),
+        builder: (_) => NewInspectionScreen(category: category),
       ),
     );
+
     await loadStatistics();
   }
 
@@ -863,6 +882,8 @@ class RequirementCoverageScreen extends StatelessWidget {
 
   static const List<_RequirementItem> _requirements = [
     _RequirementItem('Image upload / product scanning', _Status.done, 'Camera/gallery evidence capture is available.'),
+    _RequirementItem('Product category selection gate', _Status.done, 'Mandatory category selection before capture/upload; category carried through inspection, result, report and repository.'),
+    _RequirementItem('Multi-category compliance', _Status.done, 'Category-aware engine: universal LM rules for all categories, food-specific rules for food/beverage, category-specific rules for garments/electronics/electrical/cosmetics/household; advisory-only otherwise.'),
     _RequirementItem('Multiple package-side evidence', _Status.done, '2, 4, 6 or custom package sides; empty slots remain optional.'),
     _RequirementItem('QR / Barcode scanning', _Status.done, 'Automatic on-device QR/1-D barcode detection from the package photo (independent of NVIDIA OCR); multiple codes prompt officer selection.'),
 
@@ -1177,7 +1198,12 @@ class _RequirementItem {
 // ============================================================
 
 class NewInspectionScreen extends StatefulWidget {
-  const NewInspectionScreen({super.key});
+  final ProductCategoryInfo category;
+
+  const NewInspectionScreen({
+    super.key,
+    required this.category,
+  });
 
   @override
   State<NewInspectionScreen> createState() => _NewInspectionScreenState();
@@ -1391,6 +1417,7 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
             ocrLines: result.lines,
             barcode: scannedBarcode,
             barcodeNote: barcodeNote,
+            category: widget.category,
           ),
         ),
       );
@@ -1624,6 +1651,7 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
           ocrLines: const [],
           barcode: scannedBarcode,
           barcodeNote: barcodeNote,
+          category: widget.category,
         ),
       ),
     );
@@ -1853,6 +1881,52 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: widget.category.color.withAlpha(18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: widget.category.color,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      widget.category.icon,
+                      color: widget.category.color,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'SELECTED CATEGORY',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.category.label,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A2B4C),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(18),
@@ -2138,6 +2212,7 @@ class InspectionResultScreen
   final List<OcrLine> ocrLines;
   final String? barcode;
   final String? barcodeNote;
+  final ProductCategoryInfo category;
 
   const InspectionResultScreen({
     super.key,
@@ -2146,6 +2221,7 @@ class InspectionResultScreen
     this.ocrLines = const [],
     this.barcode,
     this.barcodeNote,
+    required this.category,
   });
 
   @override
@@ -2153,6 +2229,7 @@ class InspectionResultScreen
     final analysis =
         ComplianceEngine.analyzeFull(
       extractedText,
+      category: category,
     );
 
     final product =
@@ -2335,6 +2412,18 @@ class InspectionResultScreen
               ),
             ),
 
+            const SizedBox(height: 16),
+
+            if (category.isAdvisoryOnly) ...[
+              _advisoryBanner(category),
+              const SizedBox(height: 12),
+            ],
+
+            if (_categoryMismatchHint(extractedText, category) != null) ...[
+              _mismatchBanner(_categoryMismatchHint(extractedText, category)!),
+              const SizedBox(height: 12),
+            ],
+
             const SizedBox(height: 25),
 
             const Text(
@@ -2347,6 +2436,12 @@ class InspectionResultScreen
             ),
 
             const SizedBox(height: 12),
+
+            _buildField(
+              'Product Category',
+              category.label,
+              category.icon,
+            ),
 
             _buildField(
               'Product',
@@ -2569,6 +2664,7 @@ class InspectionResultScreen
                             extractedText,
                         barcode: barcode,
                         barcodeNote: barcodeNote,
+                        category: category,
 
                       ),
                     ),
@@ -2605,6 +2701,7 @@ class InspectionResultScreen
                             imagePath: image.path,
                             barcode: barcode,
                             barcodeNote: barcodeNote,
+                            category: category.label,
                           );
                         } catch (e) {
                           if (!context.mounted) return;
@@ -2634,6 +2731,7 @@ class InspectionResultScreen
                             imagePath: image.path,
                             barcode: barcode,
                             barcodeNote: barcodeNote,
+                            category: category.label,
                           );
                         } catch (e) {
                           if (!context.mounted) return;
@@ -3059,6 +3157,156 @@ class InspectionResultScreen
       ),
     );
   }
+
+  // Shown when a non-food category is selected. The packaged-food / Legal
+  // Metrology rules are not claimed to apply, so the result is advisory only
+  // and never label the product as food-compliant.
+  Widget _advisoryBanner(
+    ProductCategoryInfo category,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: Colors.orange.withValues(alpha: .4),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: Colors.orange),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${category.label} — Advisory Only',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  "Category-specific compliance rules are not currently available. "
+                  'Results are advisory and require officer verification.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'This product is not labelled as food-compliant. Only '
+                  'rules applicable to this category are evaluated.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // A possible mismatch between the selected category and the contents the
+  // vision/OCR engine actually read. This is a hint only — the officer decides.
+  String? _categoryMismatchHint(
+    String text,
+    ProductCategoryInfo category,
+  ) {
+    if (text.trim().isEmpty) return null;
+
+    final lower = text.toLowerCase();
+
+    if (category.isFood) {
+      // Selected as food but the OCR mentions non-food / common household or
+      // cosmetic terms.
+      final nonFood = RegExp(
+        r'\b(?:cosmetic|shampoo|soap|detergent|cleanser|lotion|paint|'
+        r'toothpaste|deodorant|perfume|sanitizer|laundry|talc|cream)\b',
+        caseSensitive: false,
+      );
+
+      if (nonFood.hasMatch(lower)) {
+        return 'The selected category is Food/Legal Metrology, but the label '
+            'mentions terms that are typically non-food '
+            '(cosmetic/household). Please verify the product type.';
+      }
+    } else {
+      // Selected as non-food but the OCR clearly reads packaged-food
+      // declarations (best-before, FSSAI, ingredients, net quantity, MRP).
+      final food = RegExp(
+        r'\b(?:fssai|ingredients?|nutritional|best\s+before|use\s+by|'
+        r'net\s+(?:quantity|wt|weight)|maximum\s+retail\s+price|'
+        r'allergen|energy|protein|serving\s+size)\b',
+        caseSensitive: false,
+      );
+
+      if (food.hasMatch(lower)) {
+        return 'The selected category is non-food, but the label shows '
+            'packaged-food declarations (e.g. best-before, FSSAI, '
+            'ingredients, MRP). This may be a category mismatch.';
+      }
+    }
+
+    return null;
+  }
+
+  Widget _mismatchBanner(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: Colors.red.withValues(alpha: .4),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.red),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Possible Category Mismatch',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ============================================================
@@ -3072,6 +3320,7 @@ class OfficerVerificationScreen extends StatefulWidget {
   final String extractedText;
   final String? barcode;
   final String? barcodeNote;
+  final ProductCategoryInfo category;
 
   const OfficerVerificationScreen({
     super.key,
@@ -3081,6 +3330,7 @@ class OfficerVerificationScreen extends StatefulWidget {
     required this.extractedText,
     this.barcode,
     this.barcodeNote,
+    required this.category,
   });
 
   @override
@@ -3239,6 +3489,7 @@ class _OfficerVerificationScreenState
 AUDIT METADATA
 Inspection ID: $inspectionId
 Officer ID: ${officerIdController.text.trim()}
+Product Category: ${widget.category.label}
 Inspection Location: ${locationController.text.trim()}
 Inspection Date/Time: ${inspectionTime.toIso8601String()}
 Barcode / QR Product ID: ${widget.barcode ?? widget.barcodeNote ?? 'Not scanned'}
@@ -3260,6 +3511,7 @@ Officer Remarks: ${remarksController.text.trim().isEmpty ? 'None' : remarksContr
       officerId: officerIdController.text.trim(),
       location: locationController.text.trim(),
       officerRemarks: remarksController.text.trim(),
+      productCategory: widget.category.label,
       verified: true,
     );
 
@@ -3408,6 +3660,15 @@ Officer Remarks: ${remarksController.text.trim().isEmpty ? 'None' : remarksContr
 
             const SizedBox(height: 18),
 
+            _categoryReadOnlyCard(widget.category),
+
+            const SizedBox(height: 14),
+
+            if (widget.category.isAdvisoryOnly) ...[
+              _verificationAdvisoryBanner(widget.category),
+              const SizedBox(height: 14),
+            ],
+
             _editField(
               'Product Name',
               productController,
@@ -3550,6 +3811,7 @@ Officer Remarks: ${remarksController.text.trim().isEmpty ? 'None' : remarksContr
                           'AUDIT METADATA\n'
                           'Inspection ID: $inspectionId\n'
                           'Officer ID: ${officerIdController.text.trim().isEmpty ? 'Not entered' : officerIdController.text.trim()}\n'
+                          'Product Category: ${widget.category.label}\n'
                           'Inspection Location: ${locationController.text.trim().isEmpty ? 'Not entered' : locationController.text.trim()}\n'
                           'Inspection Date/Time: ${inspectionTime.toIso8601String()}\n'
                           'Barcode / QR Product ID: ${widget.barcode ?? widget.barcodeNote ?? 'Not scanned'}\n'
@@ -3558,6 +3820,7 @@ Officer Remarks: ${remarksController.text.trim().isEmpty ? 'None' : remarksContr
                       imagePath: widget.image.path,
                       barcode: widget.barcode,
                       barcodeNote: widget.barcodeNote,
+                      category: widget.category.label,
                     );
                   } catch (e) {
                     if (!context.mounted) return;
@@ -3666,6 +3929,92 @@ Officer Remarks: ${remarksController.text.trim().isEmpty ? 'None' : remarksContr
             borderRadius: BorderRadius.circular(14),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _categoryReadOnlyCard(ProductCategoryInfo category) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: category.color.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: category.color),
+      ),
+      child: Row(
+        children: [
+          Icon(category.icon, color: category.color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Selected Category',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  category.label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A2B4C),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _verificationAdvisoryBanner(ProductCategoryInfo category) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: Colors.orange.withValues(alpha: .4),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: Colors.orange),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${category.label} — Advisory Only',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  "Category-specific compliance rules are not currently available. "
+                  'Results are advisory and require officer verification. '
+                  'This product is not labelled as food-compliant.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -4073,8 +4422,15 @@ class InspectionDetailsScreen extends StatelessWidget {
         ? 'No barcode/QR detected'
         : null;
 
+    final categoryInfo =
+        ProductCategory.byLabel(_value('productCategory', ''));
+    final categoryLabel = categoryInfo?.label ?? _value('productCategory', '');
+
     try {
-      final analysis = ComplianceEngine.analyzeFull(extractedText);
+      final analysis = ComplianceEngine.analyzeFull(
+        extractedText,
+        category: categoryInfo,
+      );
 
       await ReportService.generateReport(
         product: analysis.product,
@@ -4083,6 +4439,7 @@ class InspectionDetailsScreen extends StatelessWidget {
         imagePath: _value('imagePath', ''),
         barcode: barcode,
         barcodeNote: barcodeNote,
+        category: categoryLabel,
       );
 
       if (!context.mounted) return;
@@ -4113,6 +4470,7 @@ class InspectionDetailsScreen extends StatelessWidget {
     final location = _value('location', 'Not recorded');
     final verified = _value('verified', 'false');
     final remarks = _value('officerRemarks', 'None');
+    final category = _value('productCategory', 'Not selected');
     final barcode = _extractBarcode(
       _value(
         'extractedText',
@@ -4208,6 +4566,11 @@ class InspectionDetailsScreen extends StatelessWidget {
                   'Barcode / QR',
                   barcode,
                   Icons.qr_code_2_outlined,
+                ),
+                _detailRow(
+                  'Product Category',
+                  category,
+                  Icons.category_outlined,
                 ),
               ],
             ),
