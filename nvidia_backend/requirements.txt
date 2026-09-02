@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+requests
+python-dotenv
+# Free, offline OCR engine for per-word bounding boxes (font-size/placement).
+rapidocr-onnxruntime==1.2.3
+opencv-python-headless
+numpy
