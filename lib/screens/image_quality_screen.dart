@@ -8,12 +8,37 @@ import '../services/image_quality_service.dart';
 import '../theme/app_theme.dart';
 
 /// What the caller should do after the quality screen is dismissed.
-enum QualityDecision {
-  /// Proceed to OCR with the captured image.
-  continueScan,
+///
+/// [continueScan] is set (and [retakeIndex] is null) when every required photo
+/// passed and the caller should proceed to OCR. [retakeIndex] is set (and
+/// [continueScan] is false) when the officer chose to retake the photo captured
+/// for a specific package side.
+class QualityDecision {
+  final bool continueScan;
+  final int? retakeIndex;
 
-  /// Drop back to the capture screen so the officer can retake the photo.
-  retakeImage,
+  const QualityDecision._(this.continueScan, this.retakeIndex);
+
+  /// Every required photo passed → proceed to OCR.
+  static const QualityDecision proceed = QualityDecision._(true, null);
+
+  /// The officer chose to retake the photo for this package side (0-based).
+  const QualityDecision.retake(int this.retakeIndex) : continueScan = false;
+}
+
+/// One captured package photo together with the label shown in the quality list
+/// and the 0-based package-side index it belongs to. [sideIndex] is null for
+/// optional extra-evidence photos, which never gate OCR.
+class QualityPhoto {
+  final File file;
+  final String label;
+  final int? sideIndex;
+
+  const QualityPhoto({
+    required this.file,
+    required this.label,
+    this.sideIndex,
+  });
 }
 
 /// The three quality tiers surfaced to the officer.
@@ -22,44 +47,45 @@ enum _QualityTier { good, fair, low }
 /// Full-screen "Image Quality" step shown after capture/upload and before OCR.
 ///
 /// Runs a real, on-device pixel analysis (brightness, blur, resolution, glare)
-/// and displays a compact quality card. According to the tier:
-///   - good  → auto-continues to OCR (never blocks a normal photo);
-///   - fair  → shows a soft warning but lets the officer continue;
-///   - low   → asks the officer to retake (with a "continue anyway" escape).
-/// The existing OCR pipeline is never unnecessarily delayed.
+/// on **every** captured photo and shows the status of each one. A photo is
+/// "required" when it belongs to a package side; optional extra-evidence photos
+/// are shown but never block OCR. The flow:
+///   - every required photo good  → auto-continues to OCR;
+///   - a required photo fair      → soft warning, officer may continue or retake;
+///   - a required photo low       → blocks and asks the officer to retake only
+///                                  that photo (with an explicit continue escape).
 class ImageQualityScreen extends StatefulWidget {
   const ImageQualityScreen({
     super.key,
-    required this.imageFiles,
+    required this.photos,
     required this.category,
-    this.initialResult,
+    this.initialResults,
   });
 
-  final List<File> imageFiles;
+  final List<QualityPhoto> photos;
   final ProductCategoryInfo category;
 
-  /// Pre-computed quality result supplied by the caller (e.g. [main.dart] runs
-  /// the pixel analysis once and passes it through so it can also derive
-  /// low-confidence OCR). When null, the screen analyses the image itself.
-  final ImageQualityResult? initialResult;
+  /// Pre-computed quality results supplied by the caller (same length as
+  /// [photos]). When null, the screen analyses the photos itself.
+  final List<ImageQualityResult>? initialResults;
 
   @override
   State<ImageQualityScreen> createState() => _ImageQualityScreenState();
 }
 
 class _ImageQualityScreenState extends State<ImageQualityScreen> {
-  ImageQualityResult? _result;
+  List<ImageQualityResult> _results = const [];
   bool _analyzing = true;
   Timer? _autoContinueTimer;
 
   @override
   void initState() {
     super.initState();
-    final precomputed = widget.initialResult;
+    final precomputed = widget.initialResults;
     if (precomputed != null) {
-      _result = precomputed;
+      _results = precomputed;
       _analyzing = false;
-      _maybeAutoContinue(precomputed);
+      _maybeAutoContinue();
     } else {
       _run();
     }
@@ -72,24 +98,26 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
   }
 
   Future<void> _run() async {
-    final result = await ImageQualityService.analyze(widget.imageFiles.first);
+    final results = <ImageQualityResult>[];
+    for (final photo in widget.photos) {
+      results.add(await ImageQualityService.analyze(photo.file));
+      if (!mounted) return;
+    }
 
     if (!mounted) return;
 
     setState(() {
-      _result = result;
+      _results = results;
       _analyzing = false;
     });
 
-    _maybeAutoContinue(result);
+    _maybeAutoContinue();
   }
 
-  /// Good (and unmeasurable) images should not block the flow — ramp briefly to
-  /// show the card, then auto-continue to OCR. Fair ("moderate"/slightly blurry
-  /// or dark) and low images keep the card visible so the officer can choose
-  /// between retaking and continuing anyway.
-  void _maybeAutoContinue(ImageQualityResult result) {
-    if (_tier(result) == _QualityTier.good) {
+  /// Good screens (every required photo acceptable) should not block — ramp
+  /// briefly to show the card, then auto-continue to OCR.
+  void _maybeAutoContinue() {
+    if (_overallTier() == _QualityTier.good) {
       _autoContinueTimer = Timer(const Duration(milliseconds: 1400), () {
         if (!mounted) return;
         _finish(continueScan: true);
@@ -97,7 +125,6 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
     }
   }
 
-  /// Maps a quality result to its three-tier outcome for the UI.
   _QualityTier _tier(ImageQualityResult result) {
     if (result.notMeasurable) return _QualityTier.good;
     if (result.isLowQuality) return _QualityTier.low;
@@ -105,9 +132,50 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
     return _QualityTier.good;
   }
 
-  void _finish({required bool continueScan}) {
+  /// Whether a photo is "required": it belongs to a package side. Optional
+  /// extra-evidence photos ([QualityPhoto.sideIndex] == null) never gate OCR.
+  bool _isRequired(int index) => widget.photos[index].sideIndex != null;
+
+  /// Aggregate tier: any required photo "low" → low; any required photo "fair"
+  /// (or an optional photo low/fair) → fair; otherwise good.
+  _QualityTier _overallTier() {
+    var anyFair = false;
+    for (var i = 0; i < widget.photos.length; i++) {
+      final t = _tier(_results[i]);
+      if (_isRequired(i)) {
+        if (t == _QualityTier.low) return _QualityTier.low;
+        if (t == _QualityTier.fair) anyFair = true;
+      } else if (t == _QualityTier.low || t == _QualityTier.fair) {
+        anyFair = true;
+      }
+    }
+    return anyFair ? _QualityTier.fair : _QualityTier.good;
+  }
+
+  /// The package-side index of the first required photo that failed, if any.
+  int? _firstFailedRequiredIndex() {
+    for (var i = 0; i < widget.photos.length; i++) {
+      if (_isRequired(i) && _tier(_results[i]) == _QualityTier.low) {
+        return widget.photos[i].sideIndex;
+      }
+    }
+    return null;
+  }
+
+  /// The package-side index of the first required photo, used to give the
+  /// officer a "retake" target in the fair tier.
+  int? _firstRequiredIndex() {
+    for (var i = 0; i < widget.photos.length; i++) {
+      if (_isRequired(i)) return widget.photos[i].sideIndex;
+    }
+    return null;
+  }
+
+  void _finish({bool continueScan = false, int? retakeIndex}) {
     Navigator.of(context).pop(
-      continueScan ? QualityDecision.continueScan : QualityDecision.retakeImage,
+      continueScan
+          ? QualityDecision.proceed
+          : QualityDecision.retake(retakeIndex!),
     );
   }
 
@@ -126,15 +194,16 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
   }
 
   Widget _buildLoading() {
-    return const Center(
+    final count = widget.photos.length;
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
           Text(
-            'Checking image quality...',
-            style: TextStyle(fontWeight: FontWeight.w600),
+            'Checking $count image${count == 1 ? '' : 's'}...',
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -142,8 +211,7 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
   }
 
   Widget _buildCard() {
-    final result = _result!;
-    final tier = _tier(result);
+    final tier = _overallTier();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
@@ -152,7 +220,6 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header.
             const Text(
               'IMAGE QUALITY',
               textAlign: TextAlign.center,
@@ -175,48 +242,11 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Metric card.
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: tier == _QualityTier.low
-                      ? PackCheckColors.danger.withValues(alpha: .3)
-                      : tier == _QualityTier.fair
-                          ? PackCheckColors.warning.withValues(alpha: .35)
-                          : PackCheckColors.success.withValues(alpha: .2),
-                ),
-              ),
-              child: Column(
-                children: [
-                  ...result.metrics.map(_metricRow),
-                  if (result.notMeasurable) ...[
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Could not fully analyse this image. It will still be '
-                      'sent for OCR.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: Colors.grey,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  const Divider(height: 1),
-                  const SizedBox(height: 14),
-                  _overallRow(result),
-                ],
-              ),
-            ),
+            // Per-photo status list.
+            ...List.generate(widget.photos.length, _photoCard),
 
             const SizedBox(height: 18),
 
-            // Quality feedback: severe → retake prompt, fair → soft warning,
-            // good → auto-continue note.
             if (tier == _QualityTier.low)
               _buildLowWarning()
             else if (tier == _QualityTier.fair)
@@ -231,84 +261,110 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
     );
   }
 
-  Widget _metricRow(ImageQualityMetric metric) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
+  Widget _photoCard(int index) {
+    final photo = widget.photos[index];
+    final result = _results[index];
+    final t = _tier(result);
+    final number = index + 1;
+    final required = _isRequired(index);
+
+    final (Color statusColor, String statusText) = switch (t) {
+      _QualityTier.good => (PackCheckColors.success, '✅ Good'),
+      _QualityTier.fair => (PackCheckColors.warning, '🟡 Fair'),
+      _QualityTier.low => (PackCheckColors.danger, '❌ Low quality — Retake'),
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withValues(alpha: .3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              metric.name,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: PackCheckColors.dark,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Photo $number – ${photo.label}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
               ),
+              if (!required)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'OPTIONAL',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            metric.detail,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            metric.verdict.emoji,
-            style: const TextStyle(fontSize: 16),
-          ),
+          if (result.width > 0) ...[
+            const SizedBox(height: 2),
+            Text(
+              '${result.width} × ${result.height}px',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+          if (t == _QualityTier.low && required) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: FilledButton.icon(
+                onPressed: () => _finish(retakeIndex: photo.sideIndex),
+                icon: const Icon(
+                  Icons.photo_camera_back_outlined,
+                  size: 18,
+                ),
+                label: Text(
+                  'RETAKE PHOTO ${photo.sideIndex! + 1}',
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: PackCheckColors.danger,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _overallRow(ImageQualityResult result) {
-    final tier = _tier(result);
-    final good = tier == _QualityTier.good;
-    final Color color;
-    final String label;
-    if (result.notMeasurable) {
-      color = PackCheckColors.success;
-      label = 'Overall: PROCEEDING';
-    } else if (tier == _QualityTier.low) {
-      color = PackCheckColors.danger;
-      label = 'Overall: LOW';
-    } else if (tier == _QualityTier.fair) {
-      color = PackCheckColors.warning;
-      label = 'Overall: FAIR — usable but imperfect';
-    } else {
-      color = PackCheckColors.success;
-      label = 'Overall: GOOD — Suitable for scanning';
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          good
-              ? Icons.check_circle_outline
-              : tier == _QualityTier.fair
-                  ? Icons.warning_amber_rounded
-                  : Icons.error_outline,
-          color: color,
-          size: 18,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLowWarning() {
+    final failedIndex = _firstFailedRequiredIndex();
+    final canRetake = failedIndex != null;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -327,7 +383,7 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'IMAGE QUALITY IS LOW',
+                  'SOME IMAGES ARE LOW QUALITY',
                   style: TextStyle(
                     color: PackCheckColors.danger,
                     fontWeight: FontWeight.w800,
@@ -339,23 +395,25 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Some package text may not be readable. For a more reliable '
-            'compliance check, retake the image.',
+            'A package side may not be fully readable. Retake only the '
+            'failed photo for a more reliable compliance check.',
             style: TextStyle(
               color: Colors.black87,
               height: 1.4,
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 52,
-            child: FilledButton.icon(
-              onPressed: () => _finish(continueScan: false),
-              icon: const Icon(Icons.photo_camera_back_outlined),
-              label: const Text('RETACK IMAGE'),
+          if (canRetake) ...[
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: () => _finish(retakeIndex: failedIndex),
+                icon: const Icon(Icons.photo_camera_back_outlined),
+                label: const Text('RETAKE FAILED PHOTO'),
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 10),
           SizedBox(
             height: 52,
@@ -371,6 +429,8 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
   }
 
   Widget _buildFairWarning() {
+    final retakeTarget = _firstRequiredIndex();
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -389,7 +449,7 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'IMAGE QUALITY IS FAIR',
+                  'SOME IMAGES ARE FAIR',
                   style: TextStyle(
                     color: PackCheckColors.warning,
                     fontWeight: FontWeight.w800,
@@ -401,8 +461,9 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'The image is usable but slightly blurry, dark or reflective. '
-            'You can continue, or retake it for a more reliable result.',
+            'The images are usable but slightly blurry, dark or reflective. '
+            'You can continue, or retake the relevant photo for a more reliable '
+            'result.',
             style: TextStyle(
               color: Colors.black87,
               height: 1.4,
@@ -418,15 +479,18 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
               label: const Text('CONTINUE ANYWAY'),
             ),
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 52,
-            child: OutlinedButton.icon(
-              onPressed: () => _finish(continueScan: false),
-              icon: const Icon(Icons.photo_camera_back_outlined),
-              label: const Text('RETACK IMAGE'),
+          if (retakeTarget != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    _finish(retakeIndex: retakeTarget),
+                icon: const Icon(Icons.photo_camera_back_outlined),
+                label: const Text('RETAKE PHOTO'),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -453,7 +517,7 @@ class _ImageQualityScreenState extends State<ImageQualityScreen> {
           SizedBox(width: 12),
           Flexible(
             child: Text(
-              'Quality is acceptable — continuing to OCR…',
+              'All photos pass quality checks — continuing to OCR…',
               style: TextStyle(
                 color: PackCheckColors.success,
                 fontWeight: FontWeight.w600,

@@ -58,8 +58,16 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
     return result;
   }
 
-  Future<void> _chooseImageForSide(int sideIndex) async {
-    if (analyzing) return;
+  /// Captures / picks a photo for a package side.
+  ///
+  /// Returns true when a photo was stored for [sideIndex]. During the quality
+  /// retake loop ([allowDuringAnalysis] true) it is permitted to run while
+  /// `analyzing` is active, so the officer can replace only the failed photo.
+  Future<bool> _chooseImageForSide(
+    int sideIndex, {
+    bool allowDuringAnalysis = false,
+  }) async {
+    if (analyzing && !allowDuringAnalysis) return false;
 
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -87,7 +95,7 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
       ),
     );
 
-    if (source == null) return;
+    if (source == null) return false;
 
     try {
       final image = await _picker.pickImage(
@@ -97,16 +105,18 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
         maxHeight: 3000,
       );
 
-      if (!mounted || image == null) return;
+      if (!mounted || image == null) return false;
 
       setState(() {
         sideImages[sideIndex] = image;
       });
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not capture photo: $e')),
       );
+      return false;
     }
   }
 
@@ -162,6 +172,37 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
     }
   }
 
+  /// Builds the ordered list of captured photos to screen for quality.
+  ///
+  /// Package-side photos are listed first (each with its 1-based "Package Side"
+  /// label and its 0-based [sideImages] index), followed by any optional
+  /// extra-evidence photos (which carry no side index and never gate OCR).
+  List<QualityPhoto> _buildPhotoInputs() {
+    final list = <QualityPhoto>[];
+    for (var i = 0; i < totalSides; i++) {
+      final image = sideImages[i];
+      if (image != null) {
+        list.add(
+          QualityPhoto(
+            file: File(image.path),
+            label: 'Package Side ${i + 1}',
+            sideIndex: i,
+          ),
+        );
+      }
+    }
+    for (var e = 0; e < extraEvidence.length; e++) {
+      list.add(
+        QualityPhoto(
+          file: File(extraEvidence[e].path),
+          label: 'Additional Photo ${e + 1}',
+          sideIndex: null,
+        ),
+      );
+    }
+    return list;
+  }
+
   Future<void> scanBarcode() async {
     if (analyzing) return;
 
@@ -188,9 +229,7 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
   }
 
   Future<void> analyze() async {
-    final images = allImages;
-
-    if (images.isEmpty) {
+    if (allImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Capture at least one package photo first.'),
@@ -206,91 +245,133 @@ class _NewInspectionScreenState extends State<NewInspectionScreen> {
       analyzing = true;
     });
 
-    final imageFiles = images
-        .map((image) => File(image.path))
-        .toList();
-
     try {
-      // 1) Image-quality gate — a real, on-device pixel analysis (brightness,
-      //    blur, resolution, glare) runs BEFORE OCR. Only a clearly unsuitable
-      //    image surfaces the retake prompt; acceptable images auto-continue.
-      final qualityResult =
-          await ImageQualityService.analyze(imageFiles.first);
+      // Re-quality-screen and re-OCR until every required photo passes. Each
+      // retake replaces only the failed photo, and the whole set is re-checked
+      // before OCR runs.
+      var photoInputs = _buildPhotoInputs();
 
-      if (!mounted) return;
+      while (true) {
+        // 1) Per-photo image-quality gate — a real, on-device pixel analysis
+        //    (brightness, blur, resolution, glare) runs on EVERY captured photo
+        //    BEFORE OCR. Only clearly unsuitable photos trigger a retake.
+        final qualityResults = <ImageQualityResult>[];
+        for (final photo in photoInputs) {
+          qualityResults.add(await ImageQualityService.analyze(photo.file));
+        }
 
-      final qualityDecision = await Navigator.push<QualityDecision>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ImageQualityScreen(
-            imageFiles: imageFiles,
-            category: widget.category,
-            initialResult: qualityResult,
+        if (!mounted) return;
+
+        final qualityDecision = await Navigator.push<QualityDecision>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ImageQualityScreen(
+              photos: photoInputs,
+              category: widget.category,
+              initialResults: qualityResults,
+            ),
           ),
-        ),
-      );
+        );
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      // Cancelled, or officer chose to retake the photo — drop back to capture.
-      if (qualityDecision != QualityDecision.continueScan) {
-        setState(() {
-          analyzing = false;
-        });
-        return;
-      }
+        // Officer cancelled the quality screen — drop back to capture.
+        if (qualityDecision == null) {
+          setState(() {
+            analyzing = false;
+          });
+          return;
+        }
 
-      // If the image couldn't be measured or is clearly low quality, tell the
-      // compliance stage to prefer "needs verification" over confirmed
-      // violations, rather than fabricating a result from a poor capture.
-      final ocrLowConfidence =
-          qualityResult.notMeasurable || qualityResult.isLowQuality;
+        // Every required photo passed → proceed to OCR.
+        if (qualityDecision.continueScan) {
+          final imageFiles = photoInputs.map((p) => p.file).toList();
 
-      // 2) Push the polished, animated analysis flow. It runs the REAL PackCheck
-      // pipeline (NVIDIA OCR + on-device barcode detection) and returns the
-      // extracted text + barcode outcome. Nothing is fabricated here.
-      final outcome = await Navigator.push<AnalysisOutcome>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AnalysisLoadingScreen(
-            imageFiles: imageFiles,
-            category: widget.category,
-            initialBarcode: scannedBarcode,
-            initialBarcodeNote: barcodeNote,
-            ocrLowConfidence: ocrLowConfidence,
-          ),
-        ),
-      );
+          // If any photo couldn't be measured or is clearly low quality, tell
+          // the compliance stage to prefer "needs verification" over confirmed
+          // violations, rather than fabricating a result from a poor capture.
+          final ocrLowConfidence = qualityResults.any(
+            (r) => r.notMeasurable || r.isLowQuality,
+          );
 
-      if (!mounted) return;
+          // 2) Push the polished, animated analysis flow. It runs the REAL
+          // PackCheck pipeline (NVIDIA OCR + on-device barcode detection) and
+          // returns the extracted text + barcode outcome.
+          final outcome = await Navigator.push<AnalysisOutcome>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AnalysisLoadingScreen(
+                imageFiles: imageFiles,
+                category: widget.category,
+                initialBarcode: scannedBarcode,
+                initialBarcodeNote: barcodeNote,
+                ocrLowConfidence: ocrLowConfidence,
+              ),
+            ),
+          );
 
-      // Player pressed "Back to scan" (cancelled) — reset the button.
-      if (outcome == null) {
-        setState(() {
-          analyzing = false;
-        });
-        return;
-      }
+          if (!mounted) return;
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => InspectionResultScreen(
-            image: images.first,
-            extractedText: outcome.text,
-            ocrLines: outcome.ocrLines,
-            barcode: outcome.barcode,
-            barcodeNote: outcome.barcodeNote,
-            category: widget.category,
-            ocrLowConfidence: outcome.ocrLowConfidence,
-          ),
-        ),
-      );
+          // Player pressed "Back to scan" (cancelled) — reset the button.
+          if (outcome == null) {
+            setState(() {
+              analyzing = false;
+            });
+            return;
+          }
 
-      if (mounted) {
-        setState(() {
-          analyzing = false;
-        });
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => InspectionResultScreen(
+                image: allImages.first,
+                extractedText: outcome.text,
+                ocrLines: outcome.ocrLines,
+                barcode: outcome.barcode,
+                barcodeNote: outcome.barcodeNote,
+                category: widget.category,
+                ocrLowConfidence: outcome.ocrLowConfidence,
+              ),
+            ),
+          );
+
+          if (mounted) {
+            setState(() {
+              analyzing = false;
+            });
+          }
+          return;
+        }
+
+        // Officer chose to retake ONLY the failed photo.
+        final retakeIndex = qualityDecision.retakeIndex;
+        if (retakeIndex == null) {
+          setState(() {
+            analyzing = false;
+          });
+          return;
+        }
+
+        final replaced =
+            await _chooseImageForSide(retakeIndex, allowDuringAnalysis: true);
+        if (!mounted) return;
+
+        if (!replaced) {
+          // Officer backed out of the picker without replacing the photo.
+          setState(() {
+            analyzing = false;
+          });
+          return;
+        }
+
+        // Rebuild the set and re-check every photo before OCR.
+        photoInputs = _buildPhotoInputs();
+        if (photoInputs.isEmpty) {
+          setState(() {
+            analyzing = false;
+          });
+          return;
+        }
       }
     } catch (e) {
       if (!mounted) return;
