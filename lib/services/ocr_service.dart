@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 /// A single recognised text line together with its approximate bounding
@@ -55,9 +56,54 @@ class OcrService {
     defaultValue: 'http://10.213.187.219:8000/analyze',
   );
 
-  static Future<OcrResult> analyzeImages(
-    List<File> images,
-  ) async {
+  // In-memory cache of OCR results keyed by a deterministic hash of the input
+  // photo bytes, so re-analysing the exact same photos reuses the previous
+  // backend output instead of calling the variable AI/OCR service again.
+  static final Map<String, OcrResult> _analysisCache = {};
+
+  /// Deterministic hash over the bytes (in the given order) of [images].
+  ///
+  /// Identical photo sets produce the same hash; genuinely different photos
+  /// produce a different hash. This lets the pipeline reuse a previous analysis
+  /// for the same input so the compliance result stays stable even though the
+  /// underlying AI/OCR service may be non-deterministic.
+  static Future<String> computeImagesHash(List<File> images) async {
+    final buffer = StringBuffer();
+    for (final image in images) {
+      final bytes = await image.readAsBytes();
+      buffer
+        ..write(sha256.convert(bytes).toString())
+        ..write('|');
+    }
+    return buffer.toString();
+  }
+
+  /// Runs [fetch] (normally the OCR backend) unless the exact same [images]
+  /// were already analysed, in which case the cached result is reused. Because
+  /// the key is the photo content, identical photos yield an identical
+  /// [OcrResult] even if the backend returns variable output across calls.
+  static Future<OcrResult> analyzeImagesCached(
+    List<File> images, {
+    required Future<OcrResult> Function(List<File> images) fetch,
+  }) async {
+    final hash = await computeImagesHash(images);
+    final cached = _analysisCache[hash];
+    if (cached != null) return cached;
+
+    final result = await fetch(images);
+    _analysisCache[hash] = result;
+    return result;
+  }
+
+  /// Test helper: clears the in-memory analysis cache so tests start from a
+  /// known state.
+  static void resetAnalysisCache() => _analysisCache.clear();
+
+  static Future<OcrResult> analyzeImages(List<File> images) {
+    return analyzeImagesCached(images, fetch: _analyzeOnBackend);
+  }
+
+  static Future<OcrResult> _analyzeOnBackend(List<File> images) async {
     if (images.isEmpty) {
       throw const OcrServiceException(
         'No inspection photos selected.',

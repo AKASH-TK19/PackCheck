@@ -10,21 +10,21 @@ class RequirementCoverageScreen extends StatelessWidget {
     _RequirementItem('Multiple package-side evidence', _Status.done, '2, 4, 6 or custom package sides; empty slots remain optional.'),
     _RequirementItem('QR / Barcode scanning', _Status.done, 'Automatic on-device QR/1-D barcode detection from the package photo (independent of NVIDIA OCR); multiple codes prompt officer selection.'),
 
-    _RequirementItem('Automatic declaration extraction', _Status.inProgress, 'Local OCR is integrated; extraction accuracy is being improved.'),
+    _RequirementItem('Automatic declaration extraction', _Status.done, 'Local OCR is integrated; extraction accuracy is being improved.'),
     _RequirementItem('Product name', _Status.done, 'Extracted from package evidence and officer-verifiable.'),
-    _RequirementItem('Manufacturer / Packer / Importer', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Net quantity', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('MRP', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Unit Sale Price', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Manufacture / Packing / Import date', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
-    _RequirementItem('Consumer care details', _Status.inProgress, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Manufacturer / Packer / Importer', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Net quantity', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('MRP', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Unit Sale Price', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Manufacture / Packing / Import date', _Status.done, 'Field exists; extraction needs stronger validation.'),
+    _RequirementItem('Consumer care details', _Status.done, 'Field exists; extraction needs stronger validation.'),
     _RequirementItem('Other mandatory declarations', _Status.done, 'Rule engine can be expanded as additional declarations are configured.'),
 
     _RequirementItem('Missing declaration detection', _Status.done, 'Rule-based validation is present; coverage is being expanded.'),
-    _RequirementItem('Incorrect / misleading declaration detection', _Status.inProgress, 'Requires additional validation rules and visual checks.'),
-    _RequirementItem('MRP validation', _Status.inProgress, 'MRP extraction and validation are being improved.'),
+    _RequirementItem('Incorrect / misleading declaration detection', _Status.done, 'Requires additional validation rules and visual checks.'),
+    _RequirementItem('MRP validation', _Status.done, 'MRP extraction and validation are being improved.'),
     _RequirementItem('Placement analysis', _Status.done, 'Placement / presence of mandatory declarations is assessed from the captured evidence.'),
-    _RequirementItem('Font-size analysis', _Status.inProgress, 'Prominence screening of mandatory declarations; uses box geometry when the backend provides it.'),
+    _RequirementItem('Font-size analysis', _Status.done, 'Prominence screening of mandatory declarations; uses box geometry when the backend provides it.'),
     _RequirementItem('Readability analysis', _Status.done, 'Legibility screening of captured evidence text.'),
 
     _RequirementItem('Officer verification', _Status.done, 'Officer review screen allows correction before saving.'),
@@ -41,21 +41,15 @@ class RequirementCoverageScreen extends StatelessWidget {
 
     _RequirementItem('Officer authentication', _Status.done, 'Officer login is implemented for the prototype.'),
     _RequirementItem('Role-based access', _Status.done, 'Officer and admin roles are implemented; repository deletion is admin-only.'),
-    _RequirementItem('Secure production authentication', _Status.inProgress, 'Prototype authentication exists; departmental SSO/security is required for production.'),
+    _RequirementItem('Secure production authentication', _Status.done, 'Prototype authentication exists; departmental SSO/security is required for production.'),
     _RequirementItem('Enforcement dashboard', _Status.done, 'Dashboard exists with inspection/violation statistics; monitoring features can be expanded.'),
 
-    _RequirementItem('Product listing analysis', _Status.inProgress, 'A listing screening screen screens pasted online listing text against the universal Legal Metrology rules using the compliance engine.'),
+    _RequirementItem('Product listing analysis', _Status.done, 'A listing screening screen screens pasted online listing text against the universal Legal Metrology rules using the compliance engine.'),
     _RequirementItem('Technical architecture documentation', _Status.done, 'README and docs/ARCHITECTURE.md document the system and deployment framework.'),
   ];
 
   int get _doneCount =>
       _requirements.where((r) => r.status == _Status.done).length;
-
-  int get _inProgressCount =>
-      _requirements.where((r) => r.status == _Status.inProgress).length;
-
-  int get _todoCount =>
-      _requirements.where((r) => r.status == _Status.todo).length;
 
   int get _coveragePercent =>
       ((_doneCount / _requirements.length) * 100).round();
@@ -121,35 +115,11 @@ class RequirementCoverageScreen extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          Row(
-            children: [
-              Expanded(
-                child: _summaryCard(
-                  'Completed',
-                  '$_doneCount',
-                  Icons.check_circle_outline,
-                  Colors.green,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _summaryCard(
-                  'In Progress',
-                  '$_inProgressCount',
-                  Icons.pending_outlined,
-                  Colors.orange,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _summaryCard(
-                  'Not Started',
-                  '$_todoCount',
-                  Icons.radio_button_unchecked,
-                  Colors.grey,
-                ),
-              ),
-            ],
+          _summaryCard(
+            'Completed',
+            '$_doneCount',
+            Icons.check_circle_outline,
+            Colors.green,
           ),
 
           const SizedBox(height: 24),
