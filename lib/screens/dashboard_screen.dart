@@ -145,9 +145,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text(
-            'PackCheck',
-            style: TextStyle(fontWeight: FontWeight.bold),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Provided PackCheck logo, small and clean, vertically centred
+              // with the wordmark. BoxFit.contain keeps it never cropped.
+              Image.asset(
+                'assets/legal_metrology_login_icon.png',
+                width: 26,
+                height: 26,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'PackCheck',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
           actions: [
             IconButton(
